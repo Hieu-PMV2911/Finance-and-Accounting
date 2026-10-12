@@ -43,7 +43,16 @@ D:\TC_KT\
     └── Accounting Ledger\
         ├── DEVELOPMENT_PLAN.md    ← kế hoạch phát triển đầy đủ
         ├── docker-compose.yml     ← postgres:16 + redis:7 (nếu dùng Docker)
-        ├── Frontend\              ← Vite 8 + React 19 + TS
+        ├── Frontend\              ← Vite 8 + React 19 + TS + Tailwind v4 + shadcn/ui (SPA)
+        │   ├── components.json    ← cấu hình shadcn (style new-york, alias @/)
+        │   └── src\
+        │       ├── index.css      ← Tailwind v4 + design token OKLCH (sáng/tối)
+        │       ├── types\api.ts   ← type dùng chung (Role, AccountType, User, Account…)
+        │       ├── lib\           ← api.ts (axios + refresh token), queryClient, format, utils (cn)
+        │       ├── stores\        ← auth.store.ts (zustand + persist)
+        │       ├── components\    ← Layout, ProtectedRoute, PageHeader, DataStates
+        │       │   └── ui\        ← shadcn primitives (button, card, dialog, table, …)
+        │       └── features\      ← auth | accounts | users | profile | dashboard
         └── Backend\               ← NestJS 12 (ESM)
             ├── FUTURE_FEATURES.md
             ├── .env / .env.example
@@ -65,6 +74,7 @@ D:\TC_KT\
 | Lớp | Công nghệ |
 |---|---|
 | Frontend | Vite 8, React 19, TypeScript, react-router-dom, axios, @tanstack/react-query, zustand, zod, dayjs, recharts |
+| UI | **Tailwind CSS v4** (`@tailwindcss/vite`, cấu hình CSS-first) + **shadcn/ui** (style new-york) trên Radix UI · lucide-react · sonner · class-variance-authority |
 | Backend | NestJS 12 (**ESM**), TypeORM + PostgreSQL, @nestjs/schedule (cron), @nestjs/bullmq + Redis, Swagger, Passport + JWT |
 | Bảo mật | bcryptjs (KHÔNG dùng bcrypt), SHA-256 cho refresh token |
 | Số học tiền | **decimal.js** + cột DB `NUMERIC(19,4)` |
@@ -82,6 +92,10 @@ D:\TC_KT\
   - ⚠️ **Chưa biết mật khẩu user `postgres`** → nếu cần chạy DB thật, **hỏi người dùng** mật khẩu, đừng đoán.
   - DB cần tạo: `accounting_ledger`.
 - **Docker: CHƯA cài** → `docker-compose.yml` chỉ dùng khi người dùng cài Docker.
+- **FE chạy được KHÔNG cần DB**: có mock backend ở `D:\TC_KT\.tmp\` (`mock-server.mjs` +
+  `mock-accounts.json`, `mock-tree.json`, `mock-users.json`). Cách dùng: chạy
+  `node mock-server.mjs` (listen `127.0.0.1:3000`) rồi `pnpm dev` trong `Frontend/` —
+  Vite proxy `/api` sẽ trỏ vào mock. Đây là cách kiểm thử UI khi chưa có mật khẩu PostgreSQL.
 
 **Bẫy môi trường (rút ra từ các session trước — ĐỪNG lặp lại sai lầm):**
 1. **pnpm store/cache phải ở ổ D**: `D:/.pnpm-store`, `D:/.pnpm-cache`. Store ở C: làm dlx/install fail.
@@ -99,6 +113,11 @@ D:\TC_KT\
    (vd: `import { X } from './x.service.js'`). Quên đuôi → lỗi runtime.
 6. **`bcrypt` cần native build → dùng `bcryptjs`** (đã thay). Tương tự, ưu tiên thư viện pure-JS
    trên Windows để tránh lỗi build native.
+7. **Tailwind v4 KHÔNG có `tailwind.config.js`**: cấu hình nằm ngay trong `src/index.css`
+   (`@import 'tailwindcss'` + `@theme inline`). **ĐỪNG tạo file config kiểu v3** — sẽ bị bỏ qua.
+8. **shadcn export cả component lẫn variants** (vd `buttonVariants`) → oxlint báo
+   `react(only-export-components)`. Đã xử lý bằng comment `// oxlint-disable-next-line ...`
+   ngay trên dòng `export { ... }`. **ĐỪNG xóa comment đó** nếu không muốn lint fail.
 
 ---
 
@@ -136,6 +155,35 @@ D:\TC_KT\
   refresh token có **rotation** (thu hồi ngay khi dùng); đổi mật khẩu thu hồi toàn bộ refresh token.
 - **Comment/đặt tên**: theo phong cách hiện có trong repo; giữ tiếng Việt cho mô tả nghiệp vụ.
 
+### Frontend (Vite + React 19 + TS)
+
+- **TS config nghiêm ngặt**: `verbatimModuleSyntax` (import type phải ghi `import type`),
+  `erasableSyntaxOnly` (**KHÔNG dùng `enum`** — dùng union type + const object),
+  `noUnusedLocals`/`noUnusedParameters`.
+- **Gọi API**: mọi request đi qua `src/lib/api.ts` (axios baseURL `/api`). Dev dùng **proxy
+  của Vite** (`vite.config.ts`) trỏ `/api` → `http://localhost:3000` nên không vướng CORS.
+  Interceptor tự gắn Bearer token và **tự refresh khi 401** (single-flight, xong thì retry).
+- **Phiên đăng nhập**: `zustand` + `persist` ở `src/stores/auth.store.ts` (key `al-auth`).
+- **Dữ liệu**: `@tanstack/react-query`; query key theo feature (`['accounts']`, `['users']`,
+  `['profile']`). Sau mutation → `invalidateQueries` theo prefix.
+- **Bảo vệ route**: `ProtectedRoute` (không token → `/login`; thiếu vai trò → `/`).
+  Chỉ `admin` thấy menu **Người dùng**.
+- **Không setState trong `useEffect`** (rule lint `react(set-state-in-effect)`): để form
+  nhận giá trị khởi tạo, cha truyền `key` thay đổi khi mở modal → component remount.
+- **UI = Tailwind v4 + shadcn/ui** (KHÔNG viết CSS thuần, KHÔNG thêm UI lib khác):
+  - Token màu khai báo trong `src/index.css` (`:root` / `.dark`, hệ OKLCH) + `@theme inline`.
+    Muốn thêm màu/bo góc → sửa token, **KHÔNG hardcode mã màu** trong component.
+  - Primitive có sẵn ở `src/components/ui/`: `button`, `card`, `input`, `textarea`, `label`,
+    `select`, `checkbox`, `dialog`, `table`, `tabs`, `badge`, `avatar`, `separator`,
+    `skeleton`, `alert`, `dropdown-menu`, `sonner`. Cần thêm → tạo file mới trong thư mục đó
+    theo đúng chuẩn shadcn (giữ nguyên cấu trúc `cva` + `data-slot`).
+  - Ghép class bằng `cn()` (`@/lib/utils` = clsx + tailwind-merge); biến thể bằng `cva`.
+  - Icon dùng `lucide-react`; thông báo dùng `toast` của `sonner` (`<Toaster />` đã gắn ở `App.tsx`).
+  - Alias `@/` → `src/` (khai báo ở `vite.config.ts` + `tsconfig.app.json`), KHÔNG viết
+    đường dẫn tương đối kiểu `../../../`.
+- **Chia nhỏ bundle**: mỗi trang là 1 route lazy (`React.lazy` + `Suspense` trong `App.tsx`).
+  Thêm trang mới → thêm 1 dòng lazy, **KHÔNG import trực tiếp** để tránh phình chunk chính.
+
 ---
 
 ## 7. Lệnh thường dùng
@@ -154,7 +202,12 @@ pnpm start:prod       # chạy bản build
 
 Khởi động hạ tầng (nếu có Docker): `docker compose up -d` trong `Accounting Ledger/`.
 
-Sau khi chạy: API tại `http://localhost:3000/api`, Swagger tại `http://localhost:3000/api/docs`.
+Sau khi chạy: API tại `http://localhost:3000/api`, Swagger tại `http://localhost:3000/api/docs`,
+Frontend (Vite) tại `http://localhost:5173`.
+
+Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build`), `pnpm lint` (oxlint).
+> Lưu ý production: SPA dùng `BrowserRouter` nên máy chủ tĩnh phải có fallback về `index.html`
+> cho các route con (`/accounts`, `/users`, `/profile`).
 
 ---
 
@@ -189,6 +242,10 @@ Sau khi chạy: API tại `http://localhost:3000/api`, Swagger tại `http://loc
 - **Giai đoạn 2**: Journal workflow (nháp→xác nhận→ghi sổ), reversing entry, idempotency.
 - **Giai đoạn 3**: Sổ cái, số dư, Trial Balance.
 - **Giai đoạn 4**: Báo cáo tài chính (P&L, Balance Sheet, Cash Flow) + xuất Excel/PDF.
+- **Giai đoạn 4 (FE)**: ✅ đã gắn UI cho API mục 1–3 — trang Đăng nhập, Tổng quan,
+  Tài khoản kế toán (cây + bảng + CRUD), Người dùng (admin), Hồ sơ (đổi mật khẩu).
+  ✅ đã chuẩn hóa toàn bộ UI bằng **Tailwind v4 + shadcn/ui** (xem mục 3 & 6).
+  ⏳ còn lại: màn hình bút toán, kỳ kế toán, sổ cái, báo cáo (Recharts).
 - **Giai đoạn 5**: Queue/Schedule jobs, audit log, webhook.
 - **Giai đoạn 6**: Mở rộng — Mini ERP, Payment & Reconciliation, đa tiền tệ.
 

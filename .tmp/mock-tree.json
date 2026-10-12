@@ -1,0 +1,14 @@
+[
+  { "id": "a1", "code": "1000", "name": "Tài sản", "type": "asset", "parentId": null, "isPostable": false, "isActive": true, "description": "Nhóm tài khoản tài sản", "normalBalance": "debit", "level": 1, "children": [
+    { "id": "a2", "code": "1111", "name": "Tiền mặt Việt Nam Đồng", "type": "asset", "parentId": "a1", "isPostable": true, "isActive": true, "description": null, "normalBalance": "debit", "level": 2, "children": [] },
+    { "id": "a3", "code": "1121", "name": "Tiền gửi ngân hàng VND", "type": "asset", "parentId": "a1", "isPostable": true, "isActive": true, "description": null, "normalBalance": "debit", "level": 2, "children": [] }
+  ] },
+  { "id": "a4", "code": "3000", "name": "Nợ phải trả", "type": "liability", "parentId": null, "isPostable": true, "isActive": true, "description": null, "normalBalance": "credit", "level": 1, "children": [] },
+  { "id": "a5", "code": "4000", "name": "Vốn chủ sở hữu", "type": "equity", "parentId": null, "isPostable": true, "isActive": true, "description": null, "normalBalance": "credit", "level": 1, "children": [] },
+  { "id": "a6", "code": "5000", "name": "Doanh thu", "type": "revenue", "parentId": null, "isPostable": false, "isActive": true, "description": null, "normalBalance": "credit", "level": 1, "children": [
+    { "id": "a7", "code": "5111", "name": "Doanh thu bán hàng hóa", "type": "revenue", "parentId": "a6", "isPostable": true, "isActive": true, "description": null, "normalBalance": "credit", "level": 2, "children": [] }
+  ] },
+  { "id": "a8", "code": "6000", "name": "Chi phí", "type": "expense", "parentId": null, "isPostable": false, "isActive": true, "description": null, "normalBalance": "debit", "level": 1, "children": [
+    { "id": "a9", "code": "6421", "name": "Chi phí quản lý doanh nghiệp", "type": "expense", "parentId": "a8", "isPostable": true, "isActive": false, "description": "Đã ngừng sử dụng từ 2026", "normalBalance": "debit", "level": 2, "children": [] }
+  ] }
+]
