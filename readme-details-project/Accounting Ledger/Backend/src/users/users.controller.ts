@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -10,6 +12,7 @@ import {
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -19,16 +22,10 @@ import { Roles } from '../common/decorators/roles.decorator.js';
 import { Role } from '../common/enums/role.enum.js';
 import { PasswordService } from '../common/services/password.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
+import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
-import type { User } from './entities/user.entity.js';
 import { UsersService } from './users.service.js';
-
-/** Loại bỏ password hash trước khi trả về client. */
-function toPublicUser(user: User) {
-  const safe: Record<string, unknown> = { ...user };
-  delete safe.passwordHash;
-  return safe;
-}
+import { toPublicUser } from './user.mapper.js';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -83,5 +80,20 @@ export class UsersController {
       isActive: dto.isActive,
     });
     return toPublicUser(user);
+  }
+
+  @Post(':id/reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary:
+      'Đặt lại mật khẩu người dùng (chỉ admin) — thu hồi mọi phiên đăng nhập',
+  })
+  @ApiNoContentResponse({ description: 'Đã đặt lại mật khẩu' })
+  async resetPassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ResetPasswordDto,
+  ): Promise<void> {
+    const passwordHash = await this.passwordService.hash(dto.newPassword);
+    await this.usersService.resetPassword(id, passwordHash);
   }
 }

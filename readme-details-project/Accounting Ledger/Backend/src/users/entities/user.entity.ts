@@ -30,6 +30,10 @@ export class User {
   @Column({ name: 'full_name', type: 'varchar', length: 255, nullable: true })
   fullName: string | null;
 
+  /** URL ảnh đại diện (ảnh lưu ở nơi khác, DB chỉ giữ đường dẫn). */
+  @Column({ name: 'avatar_url', type: 'varchar', length: 512, nullable: true })
+  avatarUrl: string | null;
+
   @Column({
     type: 'enum',
     enum: Role,

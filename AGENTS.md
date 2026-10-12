@@ -49,9 +49,10 @@ D:\TC_KT\
             ├── .env / .env.example
             ├── pnpm-workspace.yaml
             └── src\
-                ├── common\        ← decorators, guards, enums, services, utils
-                ├── users\         ← User, RefreshToken entities + CRUD (admin)
+                ├── common\        ← decorators, guards, enums (Role, AccountType), services, utils
+                ├── users\         ← User, RefreshToken entities + CRUD (admin) + Profile
                 ├── auth\          ← login/refresh/logout/me/change-password + JWT
+                ├── accounts\      ← Chart of Accounts (cây tài khoản, CRUD)
                 ├── app.module.ts  ← wire ConfigModule/TypeORM/Schedule/BullMQ + APP_GUARD
                 ├── main.ts        ← prefix /api, CORS, ValidationPipe, Swagger /api/docs
                 └── seed.ts        ← tạo admin đầu tiên (pnpm seed)
@@ -157,24 +158,34 @@ Sau khi chạy: API tại `http://localhost:3000/api`, Swagger tại `http://loc
 
 ---
 
-## 8. API đã có (Auth & phân quyền)
+## 8. API đã có
 
+**Auth** (`/api/auth`) — `login`, `refresh`, `logout`, `me`, `change-password`.
+
+**Users** (`/api/users`, chỉ **admin**) — `GET` list, `POST` create, `GET/:id`,
+`PATCH/:id` (hồ sơ/vai trò/trạng thái), `POST /:id/reset-password` (thu hồi mọi phiên).
+
+**Profile** (`/api/profile`) — `GET` hồ sơ của tôi, `PATCH` cập nhật họ tên/ảnh đại diện.
+
+**Accounts** (`/api/accounts`, Chart of Accounts):
 | Method | Route | Quyền |
 |---|---|---|
-| POST | `/api/auth/login` | public |
-| POST | `/api/auth/refresh` | public |
-| POST | `/api/auth/logout` | đã đăng nhập |
-| GET | `/api/auth/me` | đã đăng nhập |
-| POST | `/api/auth/change-password` | đã đăng nhập |
-| GET/POST/PATCH | `/api/users`, `/api/users/:id` | **admin** |
-| GET | `/api/health` | public |
+| GET | `/api/accounts` | đã đăng nhập (lọc type/isActive/search/parentId) |
+| GET | `/api/accounts/tree` | đã đăng nhập |
+| GET | `/api/accounts/:id` | đã đăng nhập |
+| POST | `/api/accounts` | **admin** |
+| PATCH | `/api/accounts/:id` | **admin** |
+| DELETE | `/api/accounts/:id` | **admin** (chỉ tài khoản lá) |
+
+**Health** — `GET /api/health` (public).
 
 ---
 
 ## 9. Lộ trình (tóm tắt — chi tiết ở `DEVELOPMENT_PLAN.md`)
 
-- **Giai đoạn 1**: Account, FiscalPeriod, Journal, JournalLine, AccountBalance, AuditLog
-  + constraint cân bằng Nợ/Có + migration + seed demo. ← *bước tiếp theo*
+- **Giai đoạn 1**: FiscalPeriod, Journal, JournalLine, AccountBalance, AuditLog
+  + constraint cân bằng Nợ/Có + migration + seed demo.
+  *(Account/Chart of Accounts ✅ đã xong — xem mục 8)* ← *bước tiếp theo: FiscalPeriod*
 - **Giai đoạn 2**: Journal workflow (nháp→xác nhận→ghi sổ), reversing entry, idempotency.
 - **Giai đoạn 3**: Sổ cái, số dư, Trial Balance.
 - **Giai đoạn 4**: Báo cáo tài chính (P&L, Balance Sheet, Cash Flow) + xuất Excel/PDF.

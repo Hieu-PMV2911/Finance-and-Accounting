@@ -12,14 +12,18 @@
 - RBAC theo vai trò kế toán: `maker` (lập) / `checker` (duyệt) / `poster` (ghi sổ) / `admin`.
 - Guard chặn thao tác theo trạng thái chứng từ và vai trò. ⏳ guard theo trạng thái chứng từ (làm cùng module Journals).
 
-## 2. Người dùng — 🟡 một phần
+## 2. Người dùng — ✅ đã triển khai
 - ✅ CRUD người dùng (admin), gán vai trò, khóa/mở tài khoản.
-- ⏳ Đặt lại mật khẩu cho người dùng, hồ sơ cá nhân, ảnh đại diện.
+- ✅ Đặt lại mật khẩu cho người dùng (admin) — thu hồi mọi phiên đăng nhập.
+- ✅ Hồ sơ cá nhân: xem/cập nhật họ tên + ảnh đại diện (`/api/profile`).
+- ⏳ Tải ảnh đại diện lên (lưu file/storage) — hiện chỉ lưu URL ảnh.
 
-## 3. Tài khoản kế toán (Chart of Accounts)
-- CRUD tài khoản, cây tài khoản phân cấp (parent/child).
-- 5 loại: Tài sản / Nợ phải trả / Vốn chủ sở hữu / Doanh thu / Chi phí.
-- Chỉ cho ghi sổ vào tài khoản lá (`is_postable`).
+## 3. Tài khoản kế toán (Chart of Accounts) — ✅ đã triển khai
+- ✅ CRUD tài khoản, cây tài khoản phân cấp (parent/child) — `GET /api/accounts/tree`.
+- ✅ 5 loại: Tài sản / Nợ phải trả / Vốn chủ sở hữu / Doanh thu / Chi phí.
+- ✅ Chỉ cho ghi sổ vào tài khoản lá (`isPostable`); tài khoản có con tự động bị tắt ghi sổ.
+- ✅ Bất biến: mã duy nhất, con cùng loại cha, chống chu trình, không xóa khi còn con.
+- ⏳ Seed hệ thống tài khoản chuẩn TT200/TT133 (làm ở Giai đoạn 1).
 
 ## 4. Kỳ kế toán (Fiscal Period)
 - Tạo/mở/khóa kỳ kế toán.

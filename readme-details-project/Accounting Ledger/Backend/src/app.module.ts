@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
 
+import { AccountsModule } from './accounts/accounts.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -59,6 +60,7 @@ import { UsersModule } from './users/users.module.js';
     CommonModule,
     AuthModule,
     UsersModule,
+    AccountsModule,
   ],
   controllers: [AppController],
   providers: [

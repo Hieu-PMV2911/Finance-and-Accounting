@@ -3,12 +3,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
+import { ProfileController } from './profile.controller.js';
 import { UsersController } from './users.controller.js';
 import { UsersService } from './users.service.js';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User, RefreshToken])],
-  controllers: [UsersController],
+  controllers: [UsersController, ProfileController],
   providers: [UsersService],
   exports: [UsersService],
 })

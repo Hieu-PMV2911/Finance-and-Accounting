@@ -4,9 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 
 import { Role } from '../common/enums/role.enum.js';
+import { RefreshToken } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
 
 export interface CreateUserData {
@@ -16,11 +17,18 @@ export interface CreateUserData {
   roles?: Role[];
 }
 
+export interface UpdateProfileData {
+  fullName?: string;
+  avatarUrl?: string | null;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly users: Repository<User>,
+    @InjectRepository(RefreshToken)
+    private readonly refreshTokens: Repository<RefreshToken>,
   ) {}
 
   /** Tạo người dùng mới. Ném lỗi nếu email đã tồn tại. */
@@ -84,8 +92,36 @@ export class UsersService {
     return this.users.save(user);
   }
 
+  /** Cập nhật hồ sơ của chính người dùng (họ tên, ảnh đại diện). */
+  async updateProfile(id: string, data: UpdateProfileData): Promise<User> {
+    const user = await this.findById(id);
+
+    if (data.fullName !== undefined) {
+      user.fullName = data.fullName.trim();
+    }
+    if (data.avatarUrl !== undefined) {
+      const url = data.avatarUrl?.trim();
+      user.avatarUrl = url ? url : null;
+    }
+
+    return this.users.save(user);
+  }
+
   async updatePassword(id: string, passwordHash: string): Promise<void> {
     await this.users.update({ id }, { passwordHash });
+  }
+
+  /**
+   * Đặt lại mật khẩu (admin). Thu hồi toàn bộ refresh token đang hoạt động
+   * để buộc người dùng đăng nhập lại bằng mật khẩu mới.
+   */
+  async resetPassword(id: string, passwordHash: string): Promise<void> {
+    await this.findById(id);
+    await this.users.update({ id }, { passwordHash });
+    await this.refreshTokens.update(
+      { userId: id, revokedAt: IsNull() },
+      { revokedAt: new Date() },
+    );
   }
 
   async setLastLogin(id: string): Promise<void> {
