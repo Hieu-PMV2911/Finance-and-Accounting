@@ -1,0 +1,107 @@
+Tháng 1–2
+Foundation
+
+Học kế toán căn bản từ góc nhìn developer
+
+Nội dung cần học:
+
+Tài sản, nợ phải trả, vốn chủ sở hữu, doanh thu, chi phí.
+
+Kế toán kép: mỗi nghiệp vụ tạo ra các dòng ghi Nợ và Có.
+
+Chart of Accounts, Journal Entry, General Ledger.
+
+Phân biệt doanh thu với tiền thu được; chi phí với tiền đã chi.
+
+Hiểu báo cáo kết quả kinh doanh, bảng cân đối kế toán và báo cáo lưu chuyển tiền tệ.
+
+Bài tập thực hành: lập 20 nghiệp vụ của một công ty giả lập, ví dụ góp vốn, mua hàng, bán hàng chịu, thu tiền khách hàng, trả lương và thanh toán nhà cung cấp. Tự định khoản và giải thích từng nghiệp vụ.
+
+Đầu ra: một bộ nghiệp vụ mẫu cùng bảng định khoản, giải thích được vì sao từng tài khoản tăng hoặc giảm.
+
+Tháng 3–4
+Domain
+
+Chuyển nghiệp vụ thành mô hình dữ liệu
+
+Nội dung cần học:
+
+Journal, Journal Line, Ledger, Fiscal Period.
+
+Accounts Receivable (phải thu), Accounts Payable (phải trả).
+
+Invoice, Payment, Partial Payment, Reversal.
+
+Đối soát ngân hàng và khóa sổ kỳ kế toán.
+
+Phân quyền người lập, người duyệt và người ghi sổ.
+
+Bài tập thực hành: thiết kế schema PostgreSQL cho hệ thống sổ cái kép; viết truy vấn tổng hợp số dư theo tài khoản, kỳ kế toán và khách hàng.
+
+Đầu ra: ERD, tài liệu nghiệp vụ, schema và các test xác nhận tổng Nợ bằng tổng Có.
+
+Tháng 5–6
+Build
+
+Xây dựng Accounting Ledger API
+
+Các module:
+
+Tài khoản kế toán và kỳ kế toán.
+
+Tạo bút toán nháp, xác nhận và ghi sổ.
+
+Truy vấn sổ cái và số dư tài khoản.
+
+Đảo bút toán bằng chứng từ điều chỉnh, không xóa lịch sử đã ghi sổ.
+
+Audit log, phân quyền và kiểm soát trạng thái kỳ kế toán.
+
+Yêu cầu kỹ thuật: dùng database transaction, ràng buộc dữ liệu, idempotency khi cần và kiểm thử đồng thời. Không chỉ kiểm tra cân bằng Nợ/Có ở frontend; backend phải bảo vệ các bất biến nghiệp vụ.
+
+Đầu ra: API chạy được, tài liệu Swagger/OpenAPI, test tự động và dữ liệu demo.
+
+Tháng 7–8
+Business Flow
+
+Hoàn thiện quy trình bán hàng và thu tiền
+
+Khách hàng → hóa đơn → khoản phải thu.
+
+Thanh toán một phần hoặc nhiều lần.
+
+Hoàn tiền, điều chỉnh hóa đơn và xử lý thanh toán trùng.
+
+Nhập sao kê ngân hàng mẫu và đối soát với giao dịch nội bộ.
+
+Báo cáo công nợ còn lại và các giao dịch chưa khớp.
+
+Đầu ra: một luồng nghiệp vụ hoàn chỉnh từ hóa đơn đến thanh toán, đối soát và báo cáo.
+
+Tháng 9–10
+Specialize
+
+Chọn một nhánh chuyên sâu
+
+Nếu theo FinTech: học payment lifecycle, trạng thái giao dịch, idempotency, retry, webhook, reconciliation và xử lý sự cố.
+
+Nếu theo ERP: học quy trình mua hàng, bán hàng, công nợ, thuế, đa công ty, đa tiền tệ và tích hợp hệ thống kế toán.
+
+Đầu ra: một module chuyên sâu theo nhánh bạn chọn, kèm sơ đồ luồng và các tình huống lỗi.
+
+Tháng 11–12
+Career
+
+Đóng gói portfolio và ứng tuyển
+
+Hoàn thiện README, kiến trúc, ERD, API docs và dữ liệu demo.
+
+Viết tài liệu giải thích nghiệp vụ và các quyết định thiết kế.
+
+Tạo bộ test cho giao dịch trùng, rollback, concurrent requests và đối soát.
+
+Đọc mô tả tuyển dụng thực tế và điều chỉnh CV theo vai trò.
+
+Bắt đầu phỏng vấn từ tháng 9–10 nếu đã có module đủ tốt.
+
+Đầu ra: một dự án đủ sâu để trình bày trong phỏng vấn, không phải nhiều dự án CRUD đơn giản.

@@ -1,0 +1,19 @@
+Dự án 3 — Mini ERP
+
+Thời gian dự kiến: 6–10 tuần
+
+Mở rộng lõi kế toán thành quy trình bán hàng và mua hàng.
+
+Tính năng cần có:
+
+Customer, Vendor, Sales Invoice, Vendor Bill.
+
+Theo dõi công nợ và thanh toán một phần.
+
+Ghi nhận nghiệp vụ vào sổ cái.
+
+Báo cáo công nợ và doanh thu.
+
+Phân quyền, phê duyệt và lịch sử thao tác.
+
+Tiêu chí kỹ thuật: mỗi nghiệp vụ có thể truy ngược từ báo cáo đến bút toán, chứng từ nguồn và lịch sử thay đổi.

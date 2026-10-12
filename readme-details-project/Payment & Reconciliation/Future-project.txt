@@ -1,0 +1,19 @@
+Dự án 2 — Payment & Reconciliation
+
+Thời gian dự kiến: 6–8 tuần
+
+Xây một hệ thống mô phỏng xử lý thanh toán và đối soát với sổ giao dịch nội bộ.
+
+Tính năng cần có:
+
+Nhận yêu cầu thanh toán và quản lý trạng thái.
+
+Idempotency để ngăn xử lý lặp.
+
+Webhook giả lập, retry và xử lý kết quả đến trễ.
+
+Đối soát giao dịch nội bộ với sao kê giả lập.
+
+Danh sách giao dịch lệch và quy trình xử lý thủ công.
+
+Tiêu chí kỹ thuật: giải thích được vì sao timeout không đồng nghĩa với thanh toán thất bại, và cách phục hồi mà không tạo giao dịch trùng.

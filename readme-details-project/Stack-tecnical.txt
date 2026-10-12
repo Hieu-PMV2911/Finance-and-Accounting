@@ -1,0 +1,61 @@
+Frontend
+
+	
+
+React hoặc Next.js + TypeScript
+
+
+
+
+Backend
+
+	
+
+Node.js/NestJS hoặc stack backend bạn đang mạnh
+
+
+
+
+Database
+
+	
+
+PostgreSQL
+
+
+
+
+Queue
+
+	
+
+Redis/BullMQ hoặc message broker phù hợp khi cần xử lý bất đồng bộ
+
+
+
+
+Kiểm thử
+
+	
+
+Unit test, integration test, concurrency test
+
+
+
+
+Hạ tầng
+
+	
+
+Docker, CI/CD, structured logging, metrics
+
+
+
+
+Tài liệu
+
+	
+
+ERD, OpenAPI, sequence diagram, ADR
+
+Đặc biệt, tiền phải được biểu diễn bằng kiểu dữ liệu số chính xác phù hợp, chẳng hạn số nguyên theo đơn vị tiền nhỏ nhất hoặc decimal chính xác. Không dùng phép tính số thực nhị phân thông thường để cộng trừ tiền mà không kiểm soát sai số.

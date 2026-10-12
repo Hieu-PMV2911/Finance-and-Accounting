@@ -1,0 +1,9 @@
+packages:
+  - "."
+
+# Explicitly skip optional native/telemetry build scripts.
+# - msgpackr-extract: optional native accelerator for BullMQ (falls back to pure JS)
+# - @scarf/scarf: telemetry postinstall, not needed
+allowBuilds:
+  '@scarf/scarf': false
+  msgpackr-extract: false

@@ -1,0 +1,21 @@
+Dự án 1 — Accounting Ledger
+Bắt buộc nên làm
+
+Thời gian dự kiến: 8–12 tuần
+
+Xây lõi kế toán kép có thể dùng làm nền tảng cho ERP hoặc hệ thống tài chính.
+
+Tính năng cần có:
+
+Chart of Accounts, Journal Entry, General Ledger.
+
+Ghi sổ có kiểm tra tổng Nợ = tổng Có.
+
+Đảo bút toán và khóa kỳ.
+
+Trial Balance và báo cáo số dư tài khoản.
+
+Audit trail và phân quyền.
+
+Tiêu chí kỹ thuật: kiểm thử bất biến dữ liệu, rollback khi lỗi, xử lý hai yêu cầu ghi sổ đồng thời và bảo đảm không ghi nhận một nghiệp vụ hai lần.
+
