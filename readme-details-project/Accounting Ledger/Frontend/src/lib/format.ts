@@ -31,3 +31,12 @@ export function formatMoney(value?: string | number | null): string {
   const body = decimals ? `${grouped},${decimals}` : grouped
   return negative ? `-${body}` : body
 }
+
+/**
+ * Chuỗi phần trăm do backend tính sẵn (`'12.34'` → `'12,34%'`).
+ * `null`/rỗng → `'—'` (vd kỳ không phát sinh doanh thu nên không có biên lợi nhuận).
+ */
+export function formatPercent(value?: string | null): string {
+  if (value === null || value === undefined || value === '') return '—'
+  return `${String(value).replace('.', ',')}%`
+}

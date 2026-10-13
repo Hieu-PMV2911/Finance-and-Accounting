@@ -34,6 +34,21 @@ const FiscalPeriodsPage = lazy(() =>
     default: module.FiscalPeriodsPage,
   })),
 )
+const LedgerPage = lazy(() =>
+  import('@/features/ledger/LedgerPage').then((module) => ({
+    default: module.LedgerPage,
+  })),
+)
+const ReportsPage = lazy(() =>
+  import('@/features/reports/ReportsPage').then((module) => ({
+    default: module.ReportsPage,
+  })),
+)
+const AuditPage = lazy(() =>
+  import('@/features/audit/AuditPage').then((module) => ({
+    default: module.AuditPage,
+  })),
+)
 const UsersPage = lazy(() =>
   import('@/features/users/UsersPage').then((module) => ({
     default: module.UsersPage,
@@ -58,6 +73,8 @@ function App() {
                 <Route index element={<DashboardPage />} />
                 <Route path="journals" element={<JournalsPage />} />
                 <Route path="periods" element={<FiscalPeriodsPage />} />
+                <Route path="ledger" element={<LedgerPage />} />
+                <Route path="reports" element={<ReportsPage />} />
                 <Route path="accounts" element={<AccountsPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route
@@ -65,6 +82,12 @@ function App() {
                   element={<ProtectedRoute roles={['admin']} />}
                 >
                   <Route index element={<UsersPage />} />
+                </Route>
+                <Route
+                  path="audit"
+                  element={<ProtectedRoute roles={['admin']} />}
+                >
+                  <Route index element={<AuditPage />} />
                 </Route>
               </Route>
             </Route>

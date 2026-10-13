@@ -43,21 +43,37 @@
 - ✅ Cấp số hiệu `JE-<mã kỳ>-<0001>` bằng `pg_advisory_xact_lock` (không trùng khi ghi đồng thời).
 - ⏳ Bút toán định kỳ (recurring) và bút toán mẫu.
 
-## 6. Sổ cái & số dư (Ledger) — 🟡 một phần
+## 6. Sổ cái & số dư (Ledger) — ✅ đã triển khai
 - ✅ Bảng số dư `account_balances` (đầu kỳ / phát sinh / cuối kỳ), cập nhật trong cùng transaction khi ghi sổ.
 - ✅ Số dư thuần (Nợ − Có) nên tài khoản bị đảo sẽ tự triệt tiêu về 0; `GET /api/fiscal-periods/:id/balances`.
-- ⏳ Truy vấn sổ cái chi tiết theo tài khoản / kỳ / đối tượng.
-- ⏳ Trial Balance (bảng cân đối số phát sinh) và tái lập số dư từ journal lines để đối chiếu.
+- ✅ Truy vấn sổ cái chi tiết theo tài khoản — `GET /api/ledger/general-ledger` (theo `periodId` hoặc `fromDate`/`toDate`):
+  số dư đầu kỳ → từng dòng phát sinh kèm **số dư lũy kế** → số dư cuối kỳ.
+- ✅ Trial Balance (bảng cân đối số phát sinh) — `GET /api/ledger/trial-balance`: số dư đầu, phát sinh Nợ/Có,
+  số dư cuối của **mọi** tài khoản + tổng cộng và cờ `balanced` (Tổng Nợ = Tổng Có).
+- ✅ Đối chiếu số dư — `GET /api/ledger/reconciliation?periodId=...`: so `account_balances` đã lưu với số dư
+  **tái lập từ `journal_lines`** (chỉ tính POSTED + REVERSED), trả về `consistent` + danh sách `differences`.
+- ✅ Sổ cái và báo cáo đều đọc từ `journal_lines` nên chạy đúng cho **mọi khoảng ngày tùy ý**, không phụ thuộc bảng số dư.
 
-## 7. Báo cáo tài chính
-- Kết quả kinh doanh (P&L).
-- Bảng cân đối kế toán.
-- Lưu chuyển tiền tệ.
-- Xuất Excel/PDF.
+## 7. Báo cáo tài chính — ✅ đã triển khai
+- ✅ Kết quả kinh doanh (P&L) — `GET /api/reports/profit-and-loss`: doanh thu (Có−Nợ), chi phí (Nợ−Có),
+  lợi nhuận thuần và biên lợi nhuận.
+- ✅ Bảng cân đối kế toán — `GET /api/reports/balance-sheet`: Tài sản = Nợ phải trả + Vốn chủ sở hữu
+  (+ lợi nhuận giữ lại), có cờ `balanced`; `toDate` là ngày lập báo cáo.
+- ✅ Lưu chuyển tiền tệ — `GET /api/reports/cash-flow` (phương pháp trực tiếp): tiền đầu kỳ → 3 nhóm
+  hoạt động (kinh doanh / đầu tư / tài chính) → tiền cuối kỳ.
+- ✅ Xuất Excel/PDF — `GET /api/reports/export/:kind?format=xlsx|pdf` (`kind` = profit-and-loss |
+  balance-sheet | cash-flow). Excel dùng `exceljs`; PDF dùng `pdfkit` **nhúng font Unicode** để hiển thị
+  đúng dấu tiếng Việt.
 
-## 8. Audit & bảo mật
-- Audit log mọi thao tác thay đổi (before/after, actor, thời điểm).
-- Truy vết từ báo cáo → bút toán → chứng từ nguồn.
+## 8. Audit & bảo mật — ✅ đã triển khai
+- ✅ Audit log mọi thao tác thay đổi (`GET /api/audit-logs`, chỉ `admin`): lưu **before/after** (ảnh chụp
+  trường vô hướng), `actor` (id + email), hành động, bảng/khóa, thời điểm, `method`/`path`/`ip`/`userAgent`.
+  Ghi bằng TypeORM **entity subscriber** trong **cùng transaction** với thao tác nghiệp vụ — rollback thì
+  vết cũng biến mất; danh tính lấy từ `AsyncLocalStorage` do interceptor mở sau khi guard gắn `req.user`.
+  Bảng loại trừ: `audit_logs`, `account_balances` (dẫn xuất), `refresh_tokens`; trường nhạy cảm bị lọc.
+- ✅ Truy vết báo cáo → bút toán → chứng từ nguồn — `GET /api/audit-logs/traceability/journal-entries/:id`
+  trả về bút toán, các dòng định khoản, số chứng từ gốc và vết kiểm toán của bút toán.
+- ✅ Vết theo một bản ghi — `GET /api/audit-logs/trace/:entity/:entityId` (cũ → mới).
 
 ## 9. Xử lý bất đồng bộ (Queue + Schedule)
 - Job định kỳ: chốt số dư, kiểm tra bất biến, nhắc công nợ.

@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   BookCheck,
   Eye,
+  History,
   LoaderCircle,
   MoreHorizontal,
   Pencil,
@@ -64,6 +65,7 @@ import {
   type JournalStatus,
 } from '@/types/api'
 import { listFiscalPeriods } from '../periods/periods.api'
+import { TraceJournalDialog } from '../audit/TraceJournalDialog'
 import { JournalDetailDialog } from './JournalDetailDialog'
 import { JournalFormModal } from './JournalFormModal'
 import { ReverseJournalDialog } from './ReverseJournalDialog'
@@ -88,6 +90,8 @@ export function JournalsPage() {
   const canMake = hasRole(user, 'admin') || hasRole(user, 'maker')
   const canApprove = hasRole(user, 'admin') || hasRole(user, 'checker')
   const canPost = hasRole(user, 'admin') || hasRole(user, 'poster')
+  // Truy vết bút toán là chức năng kiểm toán — chỉ admin.
+  const canTrace = hasRole(user, 'admin')
   const queryClient = useQueryClient()
 
   const [search, setSearch] = useState('')
@@ -101,6 +105,7 @@ export function JournalsPage() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [reverseTarget, setReverseTarget] = useState<JournalEntry | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<JournalEntry | null>(null)
+  const [traceTarget, setTraceTarget] = useState<JournalEntry | null>(null)
 
   const filters: JournalFilters = {
     search: search || undefined,
@@ -331,6 +336,13 @@ export function JournalsPage() {
                           Xem chi tiết
                         </DropdownMenuItem>
 
+                        {canTrace ? (
+                          <DropdownMenuItem onClick={() => setTraceTarget(entry)}>
+                            <History />
+                            Truy vết
+                          </DropdownMenuItem>
+                        ) : null}
+
                         {canMake && entry.status === 'draft' ? (
                           <DropdownMenuItem
                             onClick={() => {
@@ -437,6 +449,12 @@ export function JournalsPage() {
           )
           invalidate()
         }}
+      />
+
+      <TraceJournalDialog
+        entryId={traceTarget?.id ?? null}
+        entryLabel={traceTarget?.entryNo ?? null}
+        onOpenChange={(open) => !open && setTraceTarget(null)}
       />
 
       <Dialog

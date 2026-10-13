@@ -319,3 +319,310 @@ export const JOURNAL_STATUS_LABELS: Record<JournalStatus, string> = {
   posted: 'Đã ghi sổ',
   reversed: 'Đã đảo',
 }
+
+// ---------------------------------------------------------------------------
+// Phạm vi báo cáo dùng chung (mục 6 & 7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Phạm vi truy vấn sổ cái / báo cáo.
+ *
+ * Backend nhận **hoặc** `periodId` **hoặc** cặp `fromDate` + `toDate` — không
+ * trộn cả hai. Component gửi lên phải đảm bảo chỉ một trong hai cách.
+ */
+export interface ReportScope {
+  periodId?: string
+  /** `YYYY-MM-DD` */
+  fromDate?: string
+  /** `YYYY-MM-DD` */
+  toDate?: string
+}
+
+// ---------------------------------------------------------------------------
+// Mục 6 — Sổ cái (ledger)
+// ---------------------------------------------------------------------------
+
+/** Một dòng phát sinh trên sổ cái chi tiết, kèm số dư lũy kế sau dòng đó. */
+export interface GeneralLedgerLine {
+  journalEntryId: string
+  entryNo: string | null
+  /** `YYYY-MM-DD` */
+  date: string
+  description: string
+  reference: string | null
+  lineDescription: string | null
+  debit: string
+  credit: string
+  /** Số dư lũy kế (thuần) sau dòng này — phần dư Nợ. */
+  balanceDebit: string
+  /** Số dư lũy kế (thuần) sau dòng này — phần dư Có. */
+  balanceCredit: string
+}
+
+export interface GeneralLedger {
+  accountId: string
+  accountCode: string
+  accountName: string
+  accountType: AccountType
+  normalBalance: NormalBalance
+  fromDate: string
+  toDate: string
+  periodId: string | null
+  periodCode: string | null
+  openingDebit: string
+  openingCredit: string
+  lines: GeneralLedgerLine[]
+  totalDebit: string
+  totalCredit: string
+  closingDebit: string
+  closingCredit: string
+}
+
+export interface TrialBalanceRow {
+  accountId: string
+  accountCode: string
+  accountName: string
+  accountType: AccountType
+  openingDebit: string
+  openingCredit: string
+  debitTotal: string
+  creditTotal: string
+  closingDebit: string
+  closingCredit: string
+}
+
+export interface TrialBalanceTotals {
+  openingDebit: string
+  openingCredit: string
+  debitTotal: string
+  creditTotal: string
+  closingDebit: string
+  closingCredit: string
+}
+
+/** Bảng cân đối số phát sinh. `balanced` = Σ dư cuối Nợ = Σ dư cuối Có. */
+export interface TrialBalance {
+  fromDate: string
+  toDate: string
+  periodId: string | null
+  periodCode: string | null
+  rows: TrialBalanceRow[]
+  totals: TrialBalanceTotals
+  balanced: boolean
+}
+
+/** Chênh lệch giữa số dư đã lưu và số dư tái lập từ bút toán. */
+export interface ReconciliationRow {
+  accountId: string
+  accountCode: string
+  accountName: string
+  storedOpeningNet: string
+  computedOpeningNet: string
+  storedDebitTotal: string
+  computedDebitTotal: string
+  storedCreditTotal: string
+  computedCreditTotal: string
+  /** Các trường lệch (rỗng ⇒ dòng này khớp). */
+  mismatched: string[]
+}
+
+/** Kết quả đối chiếu `account_balances` với `journal_lines` của một kỳ. */
+export interface Reconciliation {
+  periodId: string
+  periodCode: string
+  periodStartDate: string
+  periodEndDate: string
+  checkedAt: string
+  consistent: boolean
+  checkedAccounts: number
+  differences: ReconciliationRow[]
+}
+
+// ---------------------------------------------------------------------------
+// Mục 7 — Báo cáo tài chính (reports)
+// ---------------------------------------------------------------------------
+
+export type ReportKind = 'profit-and-loss' | 'balance-sheet' | 'cash-flow'
+export type ReportFormat = 'xlsx' | 'pdf'
+
+/** Một dòng tài khoản trên báo cáo (số tiền đã theo chiều trình bày). */
+export interface ReportAccountLine {
+  accountId: string
+  accountCode: string
+  accountName: string
+  amount: string
+}
+
+/** Một nhóm chỉ tiêu (các dòng + tổng nhóm). */
+export interface ReportSection {
+  lines: ReportAccountLine[]
+  total: string
+}
+
+export interface ProfitAndLossReport {
+  fromDate: string
+  toDate: string
+  periodId: string | null
+  periodCode: string | null
+  revenue: ReportSection
+  expense: ReportSection
+  netProfit: string
+  /** Tỷ suất lợi nhuận trên doanh thu (%), `null` khi kỳ không có doanh thu. */
+  netProfitMargin: string | null
+}
+
+export interface BalanceSheetReport {
+  asOfDate: string
+  periodId: string | null
+  periodCode: string | null
+  assets: ReportSection
+  liabilities: ReportSection
+  equity: ReportSection
+  retainedEarnings: string
+  totalAssets: string
+  totalLiabilitiesAndEquity: string
+  balanced: boolean
+}
+
+export type CashFlowGroupKey = 'operating' | 'investing' | 'financing'
+
+export interface CashFlowItem {
+  accountId: string
+  accountCode: string
+  accountName: string
+  amount: string
+}
+
+export interface CashFlowGroup {
+  key: CashFlowGroupKey
+  label: string
+  inflow: string
+  outflow: string
+  net: string
+  items: CashFlowItem[]
+}
+
+export interface CashFlowReport {
+  fromDate: string
+  toDate: string
+  periodId: string | null
+  periodCode: string | null
+  openingCash: string
+  netChange: string
+  closingCash: string
+  groups: CashFlowGroup[]
+}
+
+export const REPORT_KINDS: ReportKind[] = [
+  'profit-and-loss',
+  'balance-sheet',
+  'cash-flow',
+]
+
+export const REPORT_KIND_LABELS: Record<ReportKind, string> = {
+  'profit-and-loss': 'Kết quả kinh doanh',
+  'balance-sheet': 'Bảng cân đối kế toán',
+  'cash-flow': 'Lưu chuyển tiền tệ',
+}
+
+export const REPORT_FORMATS: ReportFormat[] = ['xlsx', 'pdf']
+
+export const REPORT_FORMAT_LABELS: Record<ReportFormat, string> = {
+  xlsx: 'Excel (.xlsx)',
+  pdf: 'PDF (.pdf)',
+}
+
+// ---------------------------------------------------------------------------
+// Mục 8 — Kiểm toán (audit)
+// ---------------------------------------------------------------------------
+
+export type AuditAction = 'create' | 'update' | 'delete'
+
+export interface AuditLog {
+  id: string
+  actorId: string | null
+  actorEmail: string | null
+  action: AuditAction
+  /** Tên bảng dữ liệu bị thay đổi (vd `journal_entries`). */
+  entity: string
+  entityId: string | null
+  /** Ảnh chụp trước khi thay đổi (chỉ trường vô hướng). */
+  before: Record<string, unknown> | null
+  /** Ảnh chụp sau khi thay đổi (chỉ trường vô hướng). */
+  after: Record<string, unknown> | null
+  method: string | null
+  path: string | null
+  ip: string | null
+  userAgent: string | null
+  createdAt: string
+}
+
+export interface AuditFilters {
+  entity?: string
+  entityId?: string
+  actorId?: string
+  action?: AuditAction
+  /** `YYYY-MM-DD` */
+  fromDate?: string
+  /** `YYYY-MM-DD` */
+  toDate?: string
+  search?: string
+  limit?: number
+  offset?: number
+}
+
+/** Một dòng định khoản trong kết quả truy vết. */
+export interface TraceJournalLine {
+  lineNo: number
+  accountCode: string
+  accountName: string
+  debit: string
+  credit: string
+  description: string | null
+}
+
+/** Truy vết một bút toán: báo cáo → bút toán → chứng từ nguồn. */
+export interface JournalTraceability {
+  entity: 'journal_entries'
+  entityId: string
+  journal: {
+    id: string
+    entryNo: string | null
+    date: string
+    status: string
+    description: string
+    periodId: string
+    periodCode: string | null
+    totalDebit: string
+    totalCredit: string
+    createdBy: string
+    approvedBy: string | null
+    approvedAt: string | null
+    postedBy: string | null
+    postedAt: string | null
+    reversalOfEntryId: string | null
+    reversedByEntryId: string | null
+  }
+  lines: TraceJournalLine[]
+  /** Số chứng từ nguồn (hóa đơn / phiếu thu-chi) để truy ngược ra giấy tờ gốc. */
+  sourceDocument: string | null
+  /** Vết kiểm toán của bút toán này, mới nhất trước. */
+  history: AuditLog[]
+}
+
+export const AUDIT_ACTIONS: AuditAction[] = ['create', 'update', 'delete']
+
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  create: 'Tạo mới',
+  update: 'Cập nhật',
+  delete: 'Xóa',
+}
+
+/** Nhãn tiếng Việt cho tên bảng dữ liệu trong vết kiểm toán. */
+export const AUDIT_ENTITY_LABELS: Record<string, string> = {
+  users: 'Người dùng',
+  accounts: 'Tài khoản kế toán',
+  fiscal_periods: 'Kỳ kế toán',
+  journal_entries: 'Bút toán',
+  journal_lines: 'Dòng định khoản',
+}

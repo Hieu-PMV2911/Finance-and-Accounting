@@ -6,6 +6,9 @@ import { describe, expect, it } from 'vitest';
 import { AccountsModule } from './accounts/accounts.module.js';
 import { AccountsService } from './accounts/accounts.service.js';
 import { Account } from './accounts/entities/account.entity.js';
+import { AuditModule } from './audit/audit.module.js';
+import { AuditService } from './audit/audit.service.js';
+import { AuditLog } from './audit/entities/audit-log.entity.js';
 import { CommonModule } from './common/common.module.js';
 import { FiscalPeriod } from './fiscal-periods/entities/fiscal-period.entity.js';
 import { FiscalPeriodsModule } from './fiscal-periods/fiscal-periods.module.js';
@@ -17,6 +20,8 @@ import { JournalsService } from './journals/journals.service.js';
 import { AccountBalance } from './ledger/entities/account-balance.entity.js';
 import { LedgerModule } from './ledger/ledger.module.js';
 import { LedgerService } from './ledger/ledger.service.js';
+import { ReportsModule } from './reports/reports.module.js';
+import { ReportsService } from './reports/reports.service.js';
 import { RefreshToken } from './users/entities/refresh-token.entity.js';
 import { User } from './users/entities/user.entity.js';
 import { UsersModule } from './users/users.module.js';
@@ -25,10 +30,11 @@ import { UsersService } from './users/users.service.js';
 /**
  * `@InjectDataSource()` cần token `DataSource`, thường do `TypeOrmModule.forRoot()`
  * cung cấp. Trong test DI ta thay bằng stub toàn cục để không phải kết nối DB thật.
+ * `subscribers` là mảng thật để `AuditSubscriber` tự đăng ký được khi khởi tạo.
  */
 @Global()
 @Module({
-  providers: [{ provide: getDataSourceToken(), useValue: {} }],
+  providers: [{ provide: getDataSourceToken(), useValue: { subscribers: [] } }],
   exports: [getDataSourceToken()],
 })
 class StubDataSourceModule {}
@@ -66,13 +72,15 @@ describe('Module wiring', () => {
 
   it('LedgerModule khởi tạo được LedgerService', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [LedgerModule],
+      imports: [StubDataSourceModule, LedgerModule],
     })
       .overrideProvider(getRepositoryToken(AccountBalance))
       .useValue({})
       .overrideProvider(getRepositoryToken(Account))
       .useValue({})
       .overrideProvider(getRepositoryToken(FiscalPeriod))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(JournalLine))
       .useValue({})
       .compile();
 
@@ -91,6 +99,8 @@ describe('Module wiring', () => {
       .overrideProvider(getRepositoryToken(AccountBalance))
       .useValue({})
       .overrideProvider(getRepositoryToken(Account))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(JournalLine))
       .useValue({})
       .compile();
 
@@ -117,6 +127,44 @@ describe('Module wiring', () => {
       .compile();
 
     expect(moduleRef.get(JournalsService)).toBeInstanceOf(JournalsService);
+    await moduleRef.close();
+  });
+
+  it('ReportsModule khởi tạo được ReportsService', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [ReportsModule],
+    })
+      .overrideProvider(getRepositoryToken(JournalLine))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Account))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(FiscalPeriod))
+      .useValue({})
+      .compile();
+
+    expect(moduleRef.get(ReportsService)).toBeInstanceOf(ReportsService);
+    await moduleRef.close();
+  });
+
+  it('AuditModule khởi tạo được AuditService (kèm Journals + Ledger)', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [StubDataSourceModule, AuditModule],
+    })
+      .overrideProvider(getRepositoryToken(AuditLog))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(JournalEntry))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(JournalLine))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(FiscalPeriod))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(AccountBalance))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Account))
+      .useValue({})
+      .compile();
+
+    expect(moduleRef.get(AuditService)).toBeInstanceOf(AuditService);
     await moduleRef.close();
   });
 });

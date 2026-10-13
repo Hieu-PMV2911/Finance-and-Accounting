@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
@@ -8,6 +8,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { AccountsModule } from './accounts/accounts.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { AuditContextInterceptor } from './audit/audit-context.interceptor.js';
+import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CommonModule } from './common/common.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
@@ -15,6 +17,7 @@ import { RolesGuard } from './common/guards/roles.guard.js';
 import { FiscalPeriodsModule } from './fiscal-periods/fiscal-periods.module.js';
 import { JournalsModule } from './journals/journals.module.js';
 import { LedgerModule } from './ledger/ledger.module.js';
+import { ReportsModule } from './reports/reports.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -67,6 +70,8 @@ import { UsersModule } from './users/users.module.js';
     LedgerModule,
     FiscalPeriodsModule,
     JournalsModule,
+    ReportsModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [
@@ -74,6 +79,9 @@ import { UsersModule } from './users/users.module.js';
     // Thứ tự quan trọng: xác thực JWT trước, rồi mới kiểm tra vai trò.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Mở vùng nhớ AsyncLocalStorage để subscriber ghi vết biết "ai đang thao tác".
+    // Guard chạy trước interceptor nên `req.user` đã có sẵn khi tới đây.
+    { provide: APP_INTERCEPTOR, useClass: AuditContextInterceptor },
   ],
 })
 export class AppModule {}

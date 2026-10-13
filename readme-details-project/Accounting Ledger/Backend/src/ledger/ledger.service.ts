@@ -9,35 +9,7 @@ import type {
   AccountBalanceView,
   LedgerMovement,
 } from './interfaces/account-balance-view.interface.js';
-
-/** Bốn cột tiền của một dòng số dư. */
-interface BalanceColumns {
-  openingDebit: string;
-  openingCredit: string;
-  debitTotal: string;
-  creditTotal: string;
-}
-
-/**
- * Số dư **thuần** của một dòng: dương = dư Nợ, âm = dư Có.
- *
- * Không được cộng riêng cột Nợ và cột Có rồi coi đó là "số dư": một tài khoản
- * hoàn toàn có thể vừa phát sinh Nợ vừa phát sinh Có (ví dụ ghi nhận doanh thu
- * rồi đảo bút toán), khi đó hai cột phải **triệt tiêu nhau** mới ra đúng số dư.
- */
-function netBalance(row: BalanceColumns): Decimal {
-  return toMoney(row.openingDebit)
-    .minus(toMoney(row.openingCredit))
-    .plus(toMoney(row.debitTotal))
-    .minus(toMoney(row.creditTotal));
-}
-
-/** Tách số dư thuần thành cặp (dư Nợ, dư Có) để trình bày — một trong hai bằng 0. */
-function splitNet(net: Decimal): { debit: string; credit: string } {
-  return net.isNegative()
-    ? { debit: moneyToString(0), credit: moneyToString(net.negated()) }
-    : { debit: moneyToString(net), credit: moneyToString(0) };
-}
+import { netBalanceOf, splitNet } from './ledger-balance.util.js';
 
 /**
  * Sổ số dư — nguồn sự thật cho số dư đầu kỳ / phát sinh / cuối kỳ của từng tài khoản.
@@ -106,8 +78,8 @@ export class LedgerService {
 
     let carried = 0;
     for (const source of sources) {
-      // Số dư thuần (Nợ trừ Có) — xem `netBalance`.
-      const net = netBalance(source);
+      // Số dư thuần (Nợ trừ Có) — xem `netBalanceOf`.
+      const net = netBalanceOf(source);
 
       // Tài khoản không còn số dư ⇒ không cần tạo dòng ở kỳ sau.
       if (net.isZero()) {
@@ -139,7 +111,7 @@ export class LedgerService {
 
     return rows
       .map((row) => {
-        const { debit, credit } = splitNet(netBalance(row));
+        const { debit, credit } = splitNet(netBalanceOf(row));
 
         return {
           accountId: row.accountId,

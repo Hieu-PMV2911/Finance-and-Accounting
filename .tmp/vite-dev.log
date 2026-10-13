@@ -1,0 +1,25 @@
+$ vite
+Port 5173 is in use, trying another one...
+
+  [32m[1mVITE[22m v8.3.4[39m  [2mready in [0m[1m2328[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5174[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[2m9:20:16 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [optimizer] bundling dependencies...
+[2m9:20:18 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mdependency optimized: [33mrecharts[32m[39m
+[2m9:20:18 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32moptimized dependencies changed. reloading[39m
+C:\Users\Admin\AppData\Local\Programs\WorkBuddyAI\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:239
+            throw new Error(detail);
+                  ^
+
+Error: [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":77,"threshold":50,"scope":"turn","targets":["D:\\TC_KT\\readme-details-project\\Accounting Ledger\\Frontend\\node_modules\\.vite\\deps_temp_1e68d4e0"],"targetCount":1}
+    at checkBulkDeleteGuard (C:\Users\Admin\AppData\Local\Programs\WorkBuddyAI\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:239:19)
+    at tryTrash (C:\Users\Admin\AppData\Local\Programs\WorkBuddyAI\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:591:5)
+    at tryRm (C:\Users\Admin\AppData\Local\Programs\WorkBuddyAI\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:785:5)
+    at Object.wrappedPromisesRm [as rm] (C:\Users\Admin\AppData\Local\Programs\WorkBuddyAI\resources\app.asar.unpacked\cli\vendor\shim\node-safe-delete-shim.cjs:829:15)
+    at Object.commit (file:///D:/TC_KT/readme-details-project/Accounting%20Ledger/Frontend/node_modules/.pnpm/vite@8.3.4_@types+node@24.19.2_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:28598:9)
+    at async commitProcessing (file:///D:/TC_KT/readme-details-project/Accounting%20Ledger/Frontend/node_modules/.pnpm/vite@8.3.4_@types+node@24.19.2_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:35915:5)
+    at async runOptimizer (file:///D:/TC_KT/readme-details-project/Accounting%20Ledger/Frontend/node_modules/.pnpm/vite@8.3.4_@types+node@24.19.2_jiti@2.7.0/node_modules/vite/dist/node/chunks/node.js:35953:5)
+
+Node.js v22.22.2
+[ELIFECYCLE] Command failed with exit code 1.

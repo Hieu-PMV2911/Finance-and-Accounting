@@ -1,13 +1,16 @@
 import type { ComponentType } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
+  BookMarked,
   BookOpen,
   CalendarRange,
   ChevronDown,
+  FileBarChart,
   Landmark,
   LayoutDashboard,
   LogOut,
   ScrollText,
+  ShieldCheck,
   UserCog,
   Users,
 } from 'lucide-react'
@@ -42,8 +45,11 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: '/journals', label: 'Bút toán', icon: ScrollText },
   { to: '/periods', label: 'Kỳ kế toán', icon: CalendarRange },
+  { to: '/ledger', label: 'Sổ cái', icon: BookMarked },
+  { to: '/reports', label: 'Báo cáo tài chính', icon: FileBarChart },
   { to: '/accounts', label: 'Tài khoản kế toán', icon: BookOpen },
   { to: '/users', label: 'Người dùng', icon: Users, adminOnly: true },
+  { to: '/audit', label: 'Kiểm toán', icon: ShieldCheck, adminOnly: true },
   { to: '/profile', label: 'Hồ sơ của tôi', icon: UserCog },
 ]
 
