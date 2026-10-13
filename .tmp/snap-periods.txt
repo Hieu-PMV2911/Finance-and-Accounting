@@ -1,0 +1,67 @@
+- generic [ref=e1] clickable [onclick]
+  - complementary
+    - paragraph
+      - StaticText "Accounting Ledger"
+    - paragraph
+      - StaticText "Sổ cái kế toán kép"
+    - navigation
+      - link "Tổng quan" [ref=e8]
+      - link "Bút toán" [ref=e9]
+      - link "Kỳ kế toán" [ref=e10]
+      - link "Tài khoản kế toán" [ref=e11]
+      - link "Người dùng" [ref=e12]
+      - link "Hồ sơ của tôi" [ref=e13]
+    - generic
+      - StaticText "API: "
+      - code
+        - StaticText "/api"
+      - StaticText " · Swagger "
+      - code
+        - StaticText "/api/docs"
+  - banner
+    - button "A admin@example.com Quản trị" [expanded=false, ref=e3]
+      - StaticText "A"
+      - paragraph
+        - StaticText "admin@example.com"
+      - paragraph
+        - StaticText "Quản trị"
+  - main
+    - heading "Kỳ kế toán" [level=1, ref=e4]
+    - paragraph
+      - StaticText "2 kỳ — 1 đang mở, 0 tạm khóa. Bút toán chỉ được ghi vào kỳ đang mở."
+    - button "Thêm kỳ" [ref=e5]
+    - textbox "Tìm theo mã hoặc tên kỳ…" [ref=e14]
+    - combobox [expanded=false, ref=e6]: Tất cả trạng thái
+      - generic [ref=e15] clickable [onclick]
+        - StaticText "Tất cả trạng thái"
+    - spinbutton "Năm" [ref=e7]
+    - table
+      - rowgroup
+        - row
+          - columnheader "MÃ KỲ" [ref=e28]
+          - columnheader "TÊN KỲ" [ref=e29]
+          - columnheader "KHOẢNG THỜI GIAN" [ref=e30]
+          - columnheader "TRẠNG THÁI" [ref=e31]
+          - columnheader "MỐC TRẠNG THÁI" [ref=e32]
+          - columnheader "HÀNH ĐỘNG" [ref=e33]
+      - row
+        - cell "2026-01-50605" [ref=e16]
+        - cell "Tháng 01/2026" [ref=e17]
+        - cell "01/01/2026 → 31/01/2026" [ref=e18]
+          - StaticText "01/01/2026 → 31/01/2026"
+        - cell "Đã chốt" [ref=e19]
+        - cell "12/10/2026 21:39" [ref=e20]
+        - cell "Hành động" [ref=e21]
+          - button "Hành động" [expanded=false, ref=e34]
+            - StaticText "Hành động"
+      - row
+        - cell "2026-02-51065" [ref=e22]
+        - cell "Tháng 02/2026" [ref=e23]
+        - cell "01/02/2026 → 28/02/2026" [ref=e24]
+          - StaticText "01/02/2026 → 28/02/2026"
+        - cell "Đang mở" [ref=e25]
+        - cell "—" [ref=e26]
+        - cell "Hành động" [ref=e27]
+          - button "Hành động" [expanded=false, ref=e35]
+            - StaticText "Hành động"
+  - region "Notifications alt+T" [ref=e2]

@@ -1,0 +1,23 @@
+- generic "Accounting LedgerSổ cái kế toán képTổng quanBút toánKỳ kế toánTài khoản kế toánNgười dùngHồ sơ của t" [ref=e1] clickable [onclick]
+  - region "Notifications alt+T" [ref=e2]
+- heading "Lập bút toán" [level=2, ref=e3]
+- spinbutton "Day Day" [ref=e21]: 13
+- spinbutton "Month Month" [ref=e22]: 10
+- spinbutton "Year Year" [ref=e23]: 2026
+- button "Show date picker Show date picker" [ref=e20]
+- textbox "Diễn giải *" [ref=e7]
+- textbox "Số chứng từ gốc" [ref=e8]
+- button "Thêm dòng" [ref=e9]
+- combobox [expanded=false, ref=e10]: Dòng 1: chọn tài khoản
+- textbox "0" [ref=e11]
+- textbox "0" [ref=e12]
+- textbox "Diễn giải dòng" [ref=e13]
+- button "Xóa dòng 1" [disabled, ref=e14]
+- combobox [expanded=false, ref=e15]: Dòng 2: chọn tài khoản
+- textbox "0" [ref=e16]
+- textbox "0" [ref=e17]
+- textbox "Diễn giải dòng" [ref=e18]
+- button "Xóa dòng 2" [disabled, ref=e19]
+- button "Hủy" [ref=e4]
+- button "Lưu nháp" [ref=e5]
+- button "Đóng" [ref=e6]

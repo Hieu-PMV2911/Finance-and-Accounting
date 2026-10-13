@@ -81,6 +81,7 @@ export class JournalsService {
   async list(query: QueryJournalsDto = {}): Promise<JournalEntry[]> {
     const qb = this.entries
       .createQueryBuilder('entry')
+      .leftJoinAndSelect('entry.period', 'period')
       .leftJoinAndSelect('entry.lines', 'line')
       .leftJoinAndSelect('line.account', 'account')
       .orderBy('entry.date', 'DESC')

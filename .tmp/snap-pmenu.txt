@@ -1,0 +1,7 @@
+- generic "Accounting LedgerSổ cái kế toán képTổng quanBút toánKỳ kế toánTài khoản kế toánNgười dùngHồ sơ của t" [ref=e1] clickable [onclick]
+  - region "Notifications alt+T" [ref=e2]
+- menuitem "Xem số dư" [ref=e3]
+- menuitem "Sửa kỳ" [ref=e4]
+- menuitem "Tạm khóa kỳ" [ref=e5]
+- menuitem "Chốt kỳ" [ref=e6]
+- menuitem "Xóa kỳ" [ref=e7]

@@ -1,18 +1,29 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, BookOpen, CheckCircle2, Layers, Wallet } from 'lucide-react'
+import {
+  ArrowRight,
+  BookOpen,
+  CalendarRange,
+  CheckCircle2,
+  Layers,
+  ScrollText,
+  Wallet,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { ErrorState, TableLoading } from '@/components/DataStates'
+import { EmptyState, ErrorState, TableLoading } from '@/components/DataStates'
 import { PageHeader } from '@/components/PageHeader'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
 import { apiErrorMessage } from '@/lib/api'
+import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
   ACCOUNT_TYPES,
@@ -20,6 +31,7 @@ import {
   type AccountType,
 } from '@/types/api'
 import { listAccounts } from '../accounts/accounts.api'
+import { listFiscalPeriods } from '../periods/periods.api'
 
 const TYPE_BAR_COLORS: Record<AccountType, string> = {
   asset: 'bg-blue-500',
@@ -34,6 +46,12 @@ export function DashboardPage() {
     queryKey: ['accounts', 'all'],
     queryFn: () => listAccounts(),
   })
+
+  const openPeriodsQuery = useQuery({
+    queryKey: ['fiscal-periods', 'open'],
+    queryFn: () => listFiscalPeriods({ status: 'open' }),
+  })
+  const openPeriods = openPeriodsQuery.data ?? []
 
   const accounts = accountsQuery.data ?? []
   const total = accounts.length
@@ -57,14 +75,22 @@ export function DashboardPage() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <PageHeader
         title="Tổng quan"
-        description="Tình hình hệ thống tài khoản kế toán"
+        description="Tình hình hệ thống tài khoản, kỳ kế toán và bút toán"
         action={
-          <Button asChild variant="outline">
-            <Link to="/accounts">
-              Quản lý tài khoản
-              <ArrowRight />
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link to="/journals">
+                <ScrollText />
+                Sổ bút toán
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/accounts">
+                Quản lý tài khoản
+                <ArrowRight />
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -129,6 +155,49 @@ export function DashboardPage() {
                   </span>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarRange className="size-4" />
+                Kỳ kế toán đang mở
+              </CardTitle>
+              <CardDescription>
+                Bút toán chỉ ghi sổ được vào kỳ đang mở. Chốt kỳ sẽ kết chuyển
+                số dư cuối kỳ thành số dư đầu kỳ của kỳ kế tiếp.
+              </CardDescription>
+              <CardAction>
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/periods">
+                    Quản lý kỳ
+                    <ArrowRight />
+                  </Link>
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              {openPeriodsQuery.isLoading ? (
+                <TableLoading rows={1} cols={3} />
+              ) : openPeriodsQuery.isError ? (
+                <ErrorState message={apiErrorMessage(openPeriodsQuery.error)} />
+              ) : openPeriods.length === 0 ? (
+                <EmptyState message="Chưa có kỳ kế toán nào đang mở." />
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {openPeriods.map((period) => (
+                    <Badge
+                      key={period.id}
+                      variant="outline"
+                      className="border-emerald-200 bg-emerald-50 text-emerald-700"
+                    >
+                      {period.code} · {period.name} · {formatDate(period.startDate)} →{' '}
+                      {formatDate(period.endDate)}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </>

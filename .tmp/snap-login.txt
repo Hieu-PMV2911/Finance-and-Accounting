@@ -1,0 +1,18 @@
+- generic [ref=e1] clickable [onclick]
+  - StaticText "Accounting Ledger"
+  - StaticText "Đăng nhập để quản lý sổ cái kế toán"
+  - form
+    - LabelText
+      - StaticText "Email"
+    - textbox "Email" [ref=e3]: admin@example.com
+      - StaticText "admin@example.com"
+    - LabelText
+      - StaticText "Mật khẩu"
+    - textbox "Mật khẩu" [ref=e4]
+    - button "Đăng nhập" [ref=e5]
+  - paragraph
+    - StaticText "Tài khoản mặc định sau "
+    - code
+      - StaticText "pnpm seed"
+    - StaticText ": admin@example.com"
+  - region "Notifications alt+T" [ref=e2]

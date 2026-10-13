@@ -1,0 +1,5 @@
+- generic "Accounting LedgerĐăng nhập để quản lý sổ cái kế toánEmailMật khẩuĐăng nhậpTài khoản mặc định sau pnp" [ref=e1] clickable [onclick]
+  - textbox "Email" [ref=e3]: admin@example.com
+  - textbox "Mật khẩu" [ref=e4]
+  - button "Đăng nhập" [ref=e5]
+  - region "Notifications alt+T" [ref=e2]

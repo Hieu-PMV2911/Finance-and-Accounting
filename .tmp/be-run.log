@@ -1,0 +1,71 @@
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +39ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCommonModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPassportModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDiscoveryModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +2ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mScheduleModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBullModule dependencies initialized[39m[38;5;3m +103ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +0ms[39m
+(node:4060) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmCoreModule dependencies initialized[39m[38;5;3m +218ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLedgerModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAccountsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mUsersModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalPeriodsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJournalsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/api}:[39m[38;5;3m +74ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +4ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/auth}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/login, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/logout, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/me, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/change-password, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mUsersController {/api/users}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users/:id, GET} route[39m[38;5;3m +3ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users/:id, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users/:id/reset-password, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProfileController {/api/profile}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/profile, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/profile, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAccountsController {/api/accounts}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/accounts, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/accounts/tree, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/accounts/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/accounts, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/accounts/:id, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/accounts/:id, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalPeriodsController {/api/fiscal-periods}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/fiscal-periods, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/fiscal-periods/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/fiscal-periods/:id/balances, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/fiscal-periods, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/fiscal-periods/:id, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/fiscal-periods/:id, DELETE} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/fiscal-periods/:id/open, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/fiscal-periods/:id/lock, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/fiscal-periods/:id/close, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mJournalsController {/api/journals}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/journals, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/journals/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/journals, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/journals/:id, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/journals/:id, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/journals/:id/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/journals/:id/post, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/journals/:id/reverse, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 4060  - [39m13/10/2026, 8:31:36 pm [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +8ms[39m
+API running on http://localhost:3000/api — docs at http://localhost:3000/api/docs

@@ -24,6 +24,16 @@ const AccountsPage = lazy(() =>
     default: module.AccountsPage,
   })),
 )
+const JournalsPage = lazy(() =>
+  import('@/features/journals/JournalsPage').then((module) => ({
+    default: module.JournalsPage,
+  })),
+)
+const FiscalPeriodsPage = lazy(() =>
+  import('@/features/periods/FiscalPeriodsPage').then((module) => ({
+    default: module.FiscalPeriodsPage,
+  })),
+)
 const UsersPage = lazy(() =>
   import('@/features/users/UsersPage').then((module) => ({
     default: module.UsersPage,
@@ -46,6 +56,8 @@ function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
                 <Route index element={<DashboardPage />} />
+                <Route path="journals" element={<JournalsPage />} />
+                <Route path="periods" element={<FiscalPeriodsPage />} />
                 <Route path="accounts" element={<AccountsPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route

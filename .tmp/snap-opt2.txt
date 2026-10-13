@@ -1,0 +1,8 @@
+- generic "Accounting LedgerSổ cái kế toán képTổng quanBút toánKỳ kế toánTài khoản kế toánNgười dùngHồ sơ của t" [ref=e1] clickable [onclick]
+  - region "Notifications alt+T" [ref=e2]
+- listbox [ref=e3]
+  - option "111 — Tiền mặt Việt Nam Đồng" [ref=e4]
+  - option "112 — Tiền gửi ngân hàng" [ref=e5]
+  - option "411 — Vốn đầu tư của chủ sở hữu" [ref=e6]
+  - option "511 — Doanh thu bán hàng" [ref=e7]
+  - option "642 — Chi phí quản lý kinh doanh" [ref=e8]
