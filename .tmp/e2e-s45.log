@@ -1,0 +1,125 @@
+
+────────────────────────────────────────────────────────────────────────
+0. Đăng nhập & chuẩn bị người dùng theo vai trò
+────────────────────────────────────────────────────────────────────────
+  ✅ admin đăng nhập
+  ✅ maker / checker / poster đăng nhập
+
+────────────────────────────────────────────────────────────────────────
+1. Danh mục tài khoản (chuẩn bị cho bút toán)
+────────────────────────────────────────────────────────────────────────
+  ✅ đã có 5 tài khoản lá
+
+────────────────────────────────────────────────────────────────────────
+2. Kỳ kế toán — tạo & kiểm tra ràng buộc (API 4)
+────────────────────────────────────────────────────────────────────────
+  ✅ tạo kỳ kế toán — status 201
+  ✅ kỳ mới ở trạng thái open — open
+  ✅ chặn mã kỳ trùng — status 409
+  ✅ chặn khoảng ngày đảo ngược — status 400
+  ✅ chặn ngày không tồn tại 2026-02-31 — status 400
+  ✅ chặn kỳ chồng lấn — status 409
+  ✅ maker không được tạo kỳ (RBAC) — status 403
+
+────────────────────────────────────────────────────────────────────────
+3. Bút toán nháp — kiểm tra bất biến kế toán (API 5)
+────────────────────────────────────────────────────────────────────────
+  ✅ chặn bút toán Nợ ≠ Có — "Bút toán không cân bằng: tổng Nợ 1000000.0000 ≠ tổng Có 900000.0000"
+  ✅ chặn dòng ghi cả hai bên — "Dòng 1: mỗi dòng chỉ được ghi Nợ hoặc Có, và số tiền phải lớn hơn 0"
+  ✅ chặn bút toán < 2 dòng — status 400
+  ✅ chặn số tiền âm — status 400
+  ✅ chặn ngày không thuộc kỳ nào — status 400
+  ✅ tạo bút toán nháp hợp lệ — status 201
+  ✅ nháp chưa có số hiệu (entryNo = null) — null
+  ✅ nháp ở trạng thái draft — draft
+  ✅ tổng Nợ = tổng Có = 100000000.0000 — 100000000.0000 / 100000000.0000
+  ✅ idempotencyKey trùng → trả về cùng bút toán — 250bf09e-a457-47fd-9110-ee2f5b6b4bb9 vs 250bf09e-a457-47fd-9110-ee2f5b6b4bb9
+  ✅ sửa được bút toán nháp — status 200
+  ✅ xóa được bút toán nháp — status 204
+
+────────────────────────────────────────────────────────────────────────
+4. Luồng maker → checker → poster
+────────────────────────────────────────────────────────────────────────
+  ✅ maker KHÔNG được ghi sổ (RBAC) — status 403
+  ✅ poster KHÔNG được duyệt (RBAC) — status 403
+  ✅ checker duyệt bút toán — status 200
+  ✅ trạng thái = approved — approved
+  ✅ ghi nhận người duyệt
+  ✅ chặn sửa bút toán đã duyệt — status 400
+  ✅ checker KHÔNG được ghi sổ (RBAC) — status 403
+  ✅ poster ghi sổ bút toán — status 200
+  ✅ trạng thái = posted — posted
+  ✅ cấp số hiệu JE-<kỳ>-0001 — JE-2026-01-50605-0001
+  ✅ ghi nhận người ghi sổ
+  ✅ ghi sổ lần 2 là idempotent (không nhân đôi) — status 200, entryNo JE-2026-01-50605-0001
+
+────────────────────────────────────────────────────────────────────────
+5. Số dư sổ cái & bảng cân đối (Ledger)
+────────────────────────────────────────────────────────────────────────
+  ✅ đọc được số dư theo kỳ — status 200
+  ✅ TK 111 phát sinh Nợ 100.000.000 — 100000000.0000
+  ✅ TK 411 phát sinh Có 100.000.000 — 100000000.0000
+  ✅ TK 111 số dư cuối Nợ 100.000.000 — 100000000.0000
+  ✅ TK 411 số dư cuối Có 100.000.000 — 100000000.0000
+  ✅ tổng Nợ = tổng Có trên sổ cái — 100000000 vs 100000000
+
+────────────────────────────────────────────────────────────────────────
+6. Đảo bút toán (reversal) — số dư phải trở về 0
+────────────────────────────────────────────────────────────────────────
+  ✅ ghi sổ bút toán #2 → số hiệu ...-0002 — JE-2026-01-50605-0002
+  ✅ maker KHÔNG được đảo bút toán (RBAC) — status 403
+  ✅ poster đảo được bút toán — status 201
+  ✅ bút toán đảo ở trạng thái posted — posted
+  ✅ bút toán đảo trỏ về bút toán gốc — 4c76687c-05bc-4eff-9ab7-54b55ec726db
+  ✅ mô tả có lý do đảo — Đảo bút toán JE-2026-01-50605-0002 — Khách hàng hủy đơn
+  ✅ đảo dấu Nợ/Có: TK 511 ghi Nợ, TK 111 ghi Có — Nợ 511 = 5000000, Có 111 = 5000000
+  ✅ bút toán gốc chuyển sang reversed — reversed
+  ✅ bút toán gốc ghi nhận bút toán đảo — 9677165c-86e0-4ce9-aa2b-2b3a194dc2d2
+  ✅ TK 511 sau đảo: Nợ = Có = 5.000.000 (net 0) — Nợ 5000000.0000 / Có 5000000.0000
+  ✅ TK 511 số dư cuối = 0 — 0.0000 / 0.0000
+  ✅ chặn đảo lại bút toán đã đảo — status 400
+
+────────────────────────────────────────────────────────────────────────
+7. Khóa kỳ kế toán — đóng băng MỌI bút toán (API 4)
+────────────────────────────────────────────────────────────────────────
+  ✅ tạo nháp trước khi khóa kỳ — status 201
+  ✅ khóa kỳ kế toán — status 200
+  ✅ trạng thái = locked — locked
+  ✅ ghi nhận thời điểm khóa
+  ✅ chặn LẬP NHÁP vào kỳ đã khóa — status 400
+  ✅ chặn SỬA bút toán nháp trong kỳ đã khóa — status 400
+  ✅ chặn XÓA bút toán nháp trong kỳ đã khóa — status 400
+  ✅ checker vẫn duyệt được nháp đã có (duyệt không ghi sổ) — status 200
+  ✅ chặn GHI SỔ vào kỳ đã khóa — status 400
+  ✅ maker KHÔNG được khóa kỳ (RBAC) — status 403
+  ✅ mở lại kỳ kế toán — status 200
+  ✅ trạng thái = open — open
+  ✅ sau khi mở lại kỳ thì ghi sổ được — status 200
+  ✅ bút toán sau khi mở lại đã ghi sổ — posted
+
+────────────────────────────────────────────────────────────────────────
+8. Kết chuyển số dư sang kỳ sau (close)
+────────────────────────────────────────────────────────────────────────
+  ✅ tạo kỳ kế toán kế tiếp — status 201
+  ✅ kết chuyển & đóng kỳ — status 200
+  ✅ trạng thái = closed — closed
+  ✅ kỳ sau có số dư đầu kỳ Nợ 100.002.000 — 100002000.0000
+  ✅ TK 511 đã triệt tiêu nên KHÔNG kết chuyển sang kỳ sau — không có dòng nào
+  ✅ số dư đầu kỳ sau vẫn cân: Σ Nợ = Σ Có — 100002000 vs 100002000
+  ✅ chặn đóng lại kỳ đã đóng — status 400
+  ✅ kỳ đã đóng KHÔNG thể mở lại — status 400
+
+────────────────────────────────────────────────────────────────────────
+9. Truy vấn & phân trang danh sách bút toán
+────────────────────────────────────────────────────────────────────────
+  ✅ đọc danh sách bút toán — status 200
+  ✅ có ít nhất 3 bút toán (1 posted + 1 đảo + ...) — total = 4
+  ✅ lọc theo status=posted — 3 bản ghi
+  ✅ lọc theo accountId (511) — 2 bản ghi
+  ✅ lọc theo periodId — status 200
+  ✅ lọc theo khoảng ngày — status 200
+  ✅ chặn truy cập không token (401) — status 401
+
+════════════════════════════════════════════════════════════════════════
+KẾT QUẢ E2E: 81 PASS / 0 FAIL
+════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,18 @@
+{
+  "name": "accounting-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Accounting Ledger — gốc monorepo (Frontend + Backend). File này CHỈ chứa script tiện dụng, KHÔNG có dependency. Mục đích chính: chặn pnpm đi ngược lên ổ D:\\ và dùng nhầm D:\\package.json (project 'waiting_list').",
+  "scripts": {
+    "dev": "pnpm --dir Frontend dev",
+    "dev:fe": "pnpm --dir Frontend dev",
+    "dev:be": "pnpm --dir Backend start:dev",
+    "build": "pnpm --dir Frontend build && pnpm --dir Backend build",
+    "build:fe": "pnpm --dir Frontend build",
+    "build:be": "pnpm --dir Backend build",
+    "lint": "pnpm --dir Frontend lint && pnpm --dir Backend lint",
+    "test": "pnpm --dir Backend test",
+    "seed": "pnpm --dir Backend seed",
+    "install:all": "pnpm --dir Frontend install && pnpm --dir Backend install"
+  }
+}

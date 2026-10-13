@@ -43,6 +43,7 @@ D:\TC_KT\
     └── Accounting Ledger\
         ├── DEVELOPMENT_PLAN.md    ← kế hoạch phát triển đầy đủ
         ├── docker-compose.yml     ← postgres:16 + redis:7 (nếu dùng Docker)
+        ├── package.json           ← script uỷ quyền: dev / dev:fe / dev:be / build / lint / test
         ├── Frontend\              ← Vite 8 + React 19 + TS + Tailwind v4 + shadcn/ui (SPA)
         │   ├── components.json    ← cấu hình shadcn (style new-york, alias @/)
         │   └── src\
@@ -58,10 +59,13 @@ D:\TC_KT\
             ├── .env / .env.example
             ├── pnpm-workspace.yaml
             └── src\
-                ├── common\        ← decorators, guards, enums (Role, AccountType), services, utils
+                ├── common\        ← decorators, guards, enums (Role, AccountType, JournalStatus, FiscalPeriodStatus), services, utils (money, date)
                 ├── users\         ← User, RefreshToken entities + CRUD (admin) + Profile
                 ├── auth\          ← login/refresh/logout/me/change-password + JWT
                 ├── accounts\      ← Chart of Accounts (cây tài khoản, CRUD)
+                ├── ledger\        ← AccountBalance + LedgerService (applyMovements, carryForwardOpening)
+                ├── fiscal-periods\← FiscalPeriod (open/lock/close) + kết chuyển số dư
+                ├── journals\      ← JournalEntry, JournalLine (draft→approved→posted→reversed)
                 ├── app.module.ts  ← wire ConfigModule/TypeORM/Schedule/BullMQ + APP_GUARD
                 ├── main.ts        ← prefix /api, CORS, ValidationPipe, Swagger /api/docs
                 └── seed.ts        ← tạo admin đầu tiên (pnpm seed)
@@ -86,16 +90,28 @@ D:\TC_KT\
 ## 4. Môi trường — TRẠNG THÁI & BẪY (đọc kỹ)
 
 **Trạng thái máy:**
-- Node 22.22.2 · npm 10.9.7 · **pnpm 12.11.2** (cài global) · git 2.55.
+- Node 22.22.2 · npm 10.9.7 · **pnpm 12.11.2** · git 2.55.
+  - Node của user do **nvm** quản lý (symlink ở `C:\Program Files\nodejs`).
+  - pnpm tồn tại ở **2 nơi**: bản của agent ở `C:\Users\Admin\.workbuddy-ai\binaries\node\versions\22.22.2-6\`,
+    và bản cho **terminal của user** ở `C:\Users\Admin\AppData\Roaming\npm\` (thư mục này mới nằm trong PATH thật của user).
+  - ⚠️ Khi cài global cho user: `npm install -g <pkg> --prefix "C:/Users/Admin/AppData/Roaming/npm"`.
+    Nếu package có `preinstall`/`postinstall` thì **phải thêm `--allow-scripts=<pkg>`** — npm chặn script
+    mặc định, shim `.cmd` sinh ra sẽ trỏ sai và lệnh không chạy được.
 - **Redis: ĐÃ cài & đang chạy** ở `127.0.0.1:6379` (`C:\Program Files\Redis\`).
-- **PostgreSQL 18: ĐÃ cài & đang chạy** tại `C:\Program Files\PostgreSQL\18` (service, port 5432, auth `scram-sha-256`).
-  - ⚠️ **Chưa biết mật khẩu user `postgres`** → nếu cần chạy DB thật, **hỏi người dùng** mật khẩu, đừng đoán.
-  - DB cần tạo: `accounting_ledger`.
-- **Docker: CHƯA cài** → `docker-compose.yml` chỉ dùng khi người dùng cài Docker.
+- **PostgreSQL: ĐÃ cài & đang chạy** — **hai bản**: 17 và 18, đều ở `C:\Program Files\PostgreSQL\`.
+  - Port 5432 đang do **PostgreSQL 17.11** phục vụ. Client: `C:\Program Files\PostgreSQL\17\bin\psql.exe`.
+  - User `postgres` / mật khẩu **`postgres`** (khớp `.env` và `docker-compose.yml`) — **đã xác nhận chạy được**.
+  - DB `accounting_ledger` **đã được tạo** (session 6). Schema do TypeORM `synchronize` tạo khi
+    `NODE_ENV != production` — bảng: `users`, `refresh_tokens`, `accounts`, `fiscal_periods`,
+    `journal_entries`, `journal_lines`, `account_balances`.
+  - Lệnh nhanh: `PGPASSWORD=postgres "/c/Program Files/PostgreSQL/17/bin/psql.exe" -h localhost -U postgres -d accounting_ledger -c "\dt"`.
+  - ⚠️ Khi production phải **tắt `synchronize`** và chuyển sang migration.
+- **Docker: CHƯA cài** → `docker-compose.yml` chỉ dùng khi người dùng cài Docker (không cần thiết vì
+  PostgreSQL + Redis đã chạy sẵn trên máy).
 - **FE chạy được KHÔNG cần DB**: có mock backend ở `D:\TC_KT\.tmp\` (`mock-server.mjs` +
   `mock-accounts.json`, `mock-tree.json`, `mock-users.json`). Cách dùng: chạy
   `node mock-server.mjs` (listen `127.0.0.1:3000`) rồi `pnpm dev` trong `Frontend/` —
-  Vite proxy `/api` sẽ trỏ vào mock. Đây là cách kiểm thử UI khi chưa có mật khẩu PostgreSQL.
+  Vite proxy `/api` sẽ trỏ vào mock. Dùng khi không muốn bật PostgreSQL.
 
 **Bẫy môi trường (rút ra từ các session trước — ĐỪNG lặp lại sai lầm):**
 1. **pnpm store/cache phải ở ổ D**: `D:/.pnpm-store`, `D:/.pnpm-cache`. Store ở C: làm dlx/install fail.
@@ -118,6 +134,34 @@ D:\TC_KT\
 8. **shadcn export cả component lẫn variants** (vd `buttonVariants`) → oxlint báo
    `react(only-export-components)`. Đã xử lý bằng comment `// oxlint-disable-next-line ...`
    ngay trên dòng `export { ... }`. **ĐỪNG xóa comment đó** nếu không muốn lint fail.
+9. **`D:\package.json` KHÔNG phải dự án này** — đó là project khác tên `waiting_list`
+   (Next.js 15 + antd + redux). Khi pnpm/npm **không thấy `package.json` ở thư mục hiện tại,
+   nó sẽ đi ngược lên các cấp cha** → chạm `D:\package.json` → chạy nhầm script `dev`
+   của nó (`next dev --turbopack --port 2528`) và kéo về ~90 package không liên quan
+   (antd, webpack-dev-server, react-icons…). Biểu hiện: `pnpm dev` "không chạy" / treo ở
+   bước download.
+   → **Luôn chạy trong `Frontend/` hoặc `Backend/`.** Gốc `Accounting Ledger/` đã có
+   `package.json` uỷ quyền (chặn không cho lọt lên `D:\`), nhưng **đừng bao giờ chạy pnpm ở `D:\TC_KT\`**
+   (chỗ đó vẫn sẽ lọt lên `D:\`).
+10. **`decimal.js` trong ESM — phải dùng named import**:
+    `import Decimal from 'decimal.js'` sẽ trỏ vào **namespace**, gây lỗi
+    `Cannot use namespace 'Decimal' as a type` / `not constructable`.
+    → Luôn viết `import { Decimal } from 'decimal.js'`; nếu chỉ cần kiểu thì `import type { Decimal }`.
+11. **Vòng lặp import ESM + `emitDecoratorMetadata` = crash lúc chạy (build vẫn xanh!)**.
+    Khi 2 entity tham chiếu vòng qua nhau (`JournalEntry` ↔ `JournalLine`), decorator
+    `@ManyToOne(() => X)` / `@OneToMany(() => Y)` sinh `design:type` **đánh giá class ngay
+    lúc nạp module** → `ReferenceError: Cannot access 'X' before initialization`.
+    Đây là lỗi **runtime**, `nest build` và `tsc` **không** phát hiện được.
+    → Phía "nhiều" (inverse side) khai báo **tên entity dạng chuỗi**:
+    `@OneToMany('JournalLine', (line: JournalLine) => line.entry)` + `import type { JournalLine }`
+    (xóa hẳn cạnh import runtime). Sau khi sửa entity, **phải chạy thật `node dist/main.js`**
+    để chắc chắn không còn lỗi này.
+12. **Postgres trả cột `numeric` về dạng `string`** — đừng so sánh với `number`. DTO nhận tiền
+    cũng validate bằng `MONEY_PATTERN` (chuỗi), rồi mới đổi sang `Decimal`. Tiền luôn được
+    chuẩn hóa 4 chữ số thập phân (`'0'` → `'0.0000'`) khi so sánh trong test.
+13. **`lock` không dùng chung được với `relations`** trong Postgres `FOR UPDATE` (quan hệ 1-n
+    phía nullable) → phải `findOne({ lock })` rồi query quan hệ ở câu thứ hai (xem
+    `JournalsService.lockEntryWithLines`).
 
 ---
 
@@ -128,7 +172,8 @@ D:\TC_KT\
 1. **Cân bằng kép**: mỗi bút toán Σ Nợ = Σ Có. **Kiểm tra ở backend, không tin frontend.**
 2. **Append-only**: bút toán đã ghi sổ **KHÔNG được sửa/xóa**. Sai thì tạo **bút toán đảo**
    (reversing entry), giữ nguyên lịch sử.
-3. **Khóa kỳ kế toán**: chặn mọi bút toán vào kỳ đã đóng/locked.
+3. **Khóa kỳ kế toán**: `locked` và `closed` đều **đóng băng toàn bộ** — chặn tạo nháp, sửa, xóa,
+   ghi sổ, đảo. Khác biệt duy nhất: `locked` mở lại được, `closed` thì không (và đã kết chuyển số dư).
 4. **Chỉ ghi vào tài khoản lá** (`is_postable = true`), không ghi vào tài khoản cha.
 5. **Tiền tệ**: dùng `NUMERIC(19,4)` trong DB + `decimal.js` trong code.
    **TUYỆT ĐỐI KHÔNG dùng `number`/float cho số tiền.**
@@ -136,6 +181,9 @@ D:\TC_KT\
    khi cập nhật số dư.
 7. **Ghi sổ trong 1 transaction**: tạo nháp → xác nhận → ghi sổ phải nguyên tử.
 8. **Audit**: mọi thay đổi phải có audit log (before/after, actor, thời điểm).
+9. **Số dư là số dư THUẦN**: `(Nợ đầu kỳ − Có đầu kỳ) + (Nợ phát sinh − Có phát sinh)`.
+   **Không** cộng riêng cột Nợ và cột Có rồi coi là số dư — tài khoản bị đảo (Nợ = Có)
+   phải triệt tiêu về 0. Số dư âm trình bày ở cột "dư Có".
 
 ---
 
@@ -200,6 +248,18 @@ pnpm seed             # tạo admin đầu tiên (đọc ADMIN_EMAIL/ADMIN_PASSW
 pnpm start:prod       # chạy bản build
 ```
 
+Chạy ở gốc `Accounting Ledger/` (uỷ quyền sang 2 app con):
+
+```bash
+pnpm dev              # = Frontend dev server (Vite, cổng 5173)
+pnpm dev:fe           # Frontend dev server
+pnpm dev:be           # Backend watch mode (NestJS, cổng 3000)
+pnpm build            # build cả Frontend + Backend
+pnpm lint             # lint cả hai
+pnpm test             # test Backend
+pnpm seed             # tạo admin đầu tiên
+```
+
 Khởi động hạ tầng (nếu có Docker): `docker compose up -d` trong `Accounting Ledger/`.
 
 Sau khi chạy: API tại `http://localhost:3000/api`, Swagger tại `http://localhost:3000/api/docs`,
@@ -230,6 +290,35 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 | PATCH | `/api/accounts/:id` | **admin** |
 | DELETE | `/api/accounts/:id` | **admin** (chỉ tài khoản lá) |
 
+**Fiscal Periods** (`/api/fiscal-periods`, mục 4 — vòng đời `open → locked → closed`):
+| Method | Route | Quyền | Ghi chú |
+|---|---|---|---|
+| GET | `/api/fiscal-periods` | đã đăng nhập | lọc `status` / `year` / `date` / `search` |
+| GET | `/api/fiscal-periods/:id` | đã đăng nhập | |
+| GET | `/api/fiscal-periods/:id/balances` | đã đăng nhập | số dư đầu kỳ / phát sinh / cuối kỳ |
+| POST | `/api/fiscal-periods` | **admin, poster** | mã duy nhất, không chồng lấn |
+| PATCH | `/api/fiscal-periods/:id` | **admin, poster** | chỉ khi kỳ đang mở |
+| DELETE | `/api/fiscal-periods/:id` | **admin** | chỉ khi kỳ mở & chưa có bút toán |
+| POST | `/api/fiscal-periods/:id/open` | **admin, poster** | mở lại kỳ tạm khóa (**200**) |
+| POST | `/api/fiscal-periods/:id/lock` | **admin, poster** | đóng băng, còn mở lại được (**200**) |
+| POST | `/api/fiscal-periods/:id/close` | **admin, poster** | chốt vĩnh viễn + kết chuyển số dư (**200**) |
+
+**Journals** (`/api/journals`, mục 5 — vòng đời `draft → approved → posted → reversed`):
+| Method | Route | Quyền | Ghi chú |
+|---|---|---|---|
+| GET | `/api/journals` | đã đăng nhập | lọc `status`/`periodId`/`accountId`/`fromDate`/`toDate`/`search`, phân trang `limit`/`offset` |
+| GET | `/api/journals/:id` | đã đăng nhập | kèm dòng định khoản + tài khoản |
+| POST | `/api/journals` | **admin, maker** | tạo nháp; nhận `idempotencyKey` (**201**) |
+| PATCH | `/api/journals/:id` | **admin, maker** | chỉ bút toán nháp, kỳ phải đang mở |
+| DELETE | `/api/journals/:id` | **admin, maker** | chỉ bút toán nháp (**204**) |
+| POST | `/api/journals/:id/approve` | **admin, checker** | nháp → đã xác nhận (**200**) |
+| POST | `/api/journals/:id/post` | **admin, poster** | cấp số hiệu + cập nhật số dư, **idempotent** (**200**) |
+| POST | `/api/journals/:id/reverse` | **admin, poster** | tạo bút toán đảo, gốc → `reversed` (**201**) |
+
+> Quy ước mã HTTP: endpoint **chuyển trạng thái** (open/lock/close/approve/post) trả **200**;
+> endpoint **tạo mới tài nguyên** (POST /journals, POST /:id/reverse) trả **201**.
+> `DELETE` trả **204**.
+
 **Health** — `GET /api/health` (public).
 
 ---
@@ -238,14 +327,16 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 
 - **Giai đoạn 1**: FiscalPeriod, Journal, JournalLine, AccountBalance, AuditLog
   + constraint cân bằng Nợ/Có + migration + seed demo.
-  *(Account/Chart of Accounts ✅ đã xong — xem mục 8)* ← *bước tiếp theo: FiscalPeriod*
-- **Giai đoạn 2**: Journal workflow (nháp→xác nhận→ghi sổ), reversing entry, idempotency.
-- **Giai đoạn 3**: Sổ cái, số dư, Trial Balance.
+  ✅ Account/Chart of Accounts, FiscalPeriod, Journal/JournalLine, AccountBalance **đã xong**
+  (mục 4, 5, 6 API — xem mục 8). ⏳ còn `AuditLog` + migration + seed demo.
+- **Giai đoạn 2**: ✅ Journal workflow (nháp→xác nhận→ghi sổ), reversing entry, idempotency.
+- **Giai đoạn 3**: 🟡 Sổ cái, số dư ✅ — ⏳ Trial Balance (bảng cân đối số phát sinh).
 - **Giai đoạn 4**: Báo cáo tài chính (P&L, Balance Sheet, Cash Flow) + xuất Excel/PDF.
 - **Giai đoạn 4 (FE)**: ✅ đã gắn UI cho API mục 1–3 — trang Đăng nhập, Tổng quan,
   Tài khoản kế toán (cây + bảng + CRUD), Người dùng (admin), Hồ sơ (đổi mật khẩu).
   ✅ đã chuẩn hóa toàn bộ UI bằng **Tailwind v4 + shadcn/ui** (xem mục 3 & 6).
-  ⏳ còn lại: màn hình bút toán, kỳ kế toán, sổ cái, báo cáo (Recharts).
+  ⏳ còn lại: màn hình **bút toán**, **kỳ kế toán**, sổ cái, báo cáo (Recharts) — API mục 4 & 5
+  đã sẵn sàng, chưa gắn UI.
 - **Giai đoạn 5**: Queue/Schedule jobs, audit log, webhook.
 - **Giai đoạn 6**: Mở rộng — Mini ERP, Payment & Reconciliation, đa tiền tệ.
 
@@ -255,6 +346,10 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 
 - **Sửa code thì phải verify**: sau khi đổi code chạy `pnpm build` + `pnpm test` (+ `pnpm lint`).
   Không tuyên bố "xong" nếu chưa build/test pass.
+- **Đổi entity / quan hệ TypeORM → phải chạy thật**: `node dist/main.js` và kiểm tra API thật
+  (bẫy #11 là lỗi runtime, build xanh vẫn crash). Nếu có DB thì chạy `pnpm seed` rồi gọi API
+  để chắc chắn schema + luồng nghiệp vụ hoạt động.
+- **Sửa hành vi API → cập nhật bảng ở mục 8** (route, quyền, mã HTTP) cho khớp.
 - **Không đoán bí mật** (mật khẩu DB, secret). Thiếu thì **hỏi người dùng**.
 - **Không phá môi trường**: tuân thủ mục 4. Không tự ý cài/xóa thứ ngoài phạm vi yêu cầu.
 - **Không hardcode secret** vào code; đưa vào `.env` và cập nhật `.env.example` tương ứng.

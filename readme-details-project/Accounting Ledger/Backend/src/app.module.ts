@@ -12,6 +12,9 @@ import { AuthModule } from './auth/auth.module.js';
 import { CommonModule } from './common/common.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
+import { FiscalPeriodsModule } from './fiscal-periods/fiscal-periods.module.js';
+import { JournalsModule } from './journals/journals.module.js';
+import { LedgerModule } from './ledger/ledger.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -61,6 +64,9 @@ import { UsersModule } from './users/users.module.js';
     AuthModule,
     UsersModule,
     AccountsModule,
+    LedgerModule,
+    FiscalPeriodsModule,
+    JournalsModule,
   ],
   controllers: [AppController],
   providers: [
