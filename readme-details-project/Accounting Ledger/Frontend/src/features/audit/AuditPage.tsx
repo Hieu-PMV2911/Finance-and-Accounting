@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import type { ColumnDef } from '@tanstack/react-table'
 import { RefreshCw, Search, ShieldCheck } from 'lucide-react'
 
 import { EmptyState, ErrorState, TableLoading } from '@/components/DataStates'
@@ -7,6 +8,8 @@ import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -15,14 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { apiErrorMessage } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
@@ -100,6 +95,76 @@ function AuditLogsTab() {
 
   const logs = query.data ?? []
 
+  const columns = useMemo<ColumnDef<AuditLog>[]>(
+    () => [
+      {
+        accessorKey: 'createdAt',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Thời điểm" />
+        ),
+        cell: ({ row }) => (
+          <span className="text-muted-foreground text-sm whitespace-nowrap">
+            {formatDateTime(row.original.createdAt)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'action',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Hành động" />
+        ),
+        cell: ({ row }) => (
+          <Badge variant="outline" className={ACTION_BADGE[row.original.action]}>
+            {AUDIT_ACTION_LABELS[row.original.action]}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: 'entity',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Bảng dữ liệu" />
+        ),
+        cell: ({ row }) => (
+          <span className="text-sm">
+            {AUDIT_ENTITY_LABELS[row.original.entity] ?? row.original.entity}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'entityId',
+        header: 'Id bản ghi',
+        enableSorting: false,
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">
+            {row.original.entityId
+              ? `${row.original.entityId.slice(0, 8)}…`
+              : '—'}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'actorEmail',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Người thực hiện" />
+        ),
+        cell: ({ row }) => (
+          <span className="text-sm">{row.original.actorEmail ?? '—'}</span>
+        ),
+      },
+      {
+        id: 'request',
+        header: 'Request',
+        enableSorting: false,
+        cell: ({ row }) => (
+          <span className="text-muted-foreground font-mono text-xs">
+            {row.original.method ?? ''} {row.original.path ?? ''}
+          </span>
+        ),
+      },
+    ],
+    [],
+  )
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -162,20 +227,18 @@ function AuditLogsTab() {
         </Select>
 
         <div className="flex items-center gap-2">
-          <Input
-            className="w-[150px]"
-            type="date"
-            aria-label="Từ ngày"
+          <DatePicker
+            ariaLabel="Từ ngày"
             value={fromDate}
-            onChange={(event) => setFromDate(event.target.value)}
+            onChange={setFromDate}
+            placeholder="Từ ngày"
           />
           <span className="text-muted-foreground text-sm">→</span>
-          <Input
-            className="w-[150px]"
-            type="date"
-            aria-label="Đến ngày"
+          <DatePicker
+            ariaLabel="Đến ngày"
             value={toDate}
-            onChange={(event) => setToDate(event.target.value)}
+            onChange={setToDate}
+            placeholder="Đến ngày"
           />
         </div>
 
@@ -197,50 +260,12 @@ function AuditLogsTab() {
         ) : logs.length === 0 ? (
           <EmptyState message="Không có vết kiểm toán nào phù hợp. Vết chỉ được ghi khi thay đổi dữ liệu qua API." />
         ) : (
-          <div className="max-h-[65vh] overflow-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Thời điểm</TableHead>
-                  <TableHead>Hành động</TableHead>
-                  <TableHead>Bảng dữ liệu</TableHead>
-                  <TableHead>Id bản ghi</TableHead>
-                  <TableHead>Người thực hiện</TableHead>
-                  <TableHead>Request</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.map((log) => (
-                  <TableRow
-                    key={log.id}
-                    className="cursor-pointer"
-                    onClick={() => setDetail(log)}
-                  >
-                    <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                      {formatDateTime(log.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={ACTION_BADGE[log.action]}>
-                        {AUDIT_ACTION_LABELS[log.action]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {AUDIT_ENTITY_LABELS[log.entity] ?? log.entity}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {log.entityId ? `${log.entityId.slice(0, 8)}…` : '—'}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {log.actorEmail ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground font-mono text-xs">
-                      {log.method ?? ''} {log.path ?? ''}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <DataTable
+            columns={columns}
+            data={logs}
+            onRowClick={(log) => setDetail(log)}
+            hidePaginationWhenSinglePage={logs.length <= 10}
+          />
         )}
       </Card>
 

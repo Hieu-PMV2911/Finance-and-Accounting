@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ColumnDef } from '@tanstack/react-table'
 import {
   Archive,
   CalendarRange,
@@ -21,6 +22,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table'
 import {
   Dialog,
   DialogContent,
@@ -44,16 +46,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { apiErrorMessage } from '@/lib/api'
-import { formatDate, formatDateTime } from '@/lib/format'
+import { formatDate, formatDateInput, formatDateTime } from '@/lib/format'
 import { hasRole, useAuthStore } from '@/stores/auth.store'
 import {
   FISCAL_PERIOD_STATUSES,
@@ -137,6 +131,12 @@ export function FiscalPeriodsPage() {
     queryFn: () => listFiscalPeriods(filters),
   })
 
+  // Toàn bộ kỳ (không lọc) — dùng để chặn chọn ngày đã thuộc kỳ khác.
+  const allPeriodsQuery = useQuery({
+    queryKey: ['fiscal-periods', 'options'],
+    queryFn: () => listFiscalPeriods(),
+  })
+
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ['fiscal-periods'] })
 
@@ -184,6 +184,175 @@ export function FiscalPeriodsPage() {
   const periods = periodsQuery.data ?? []
   const openCount = periods.filter((item) => item.status === 'open').length
   const lockedCount = periods.filter((item) => item.status === 'locked').length
+
+  // Khoảng ngày của các kỳ KHÁC — bị làm mờ, không chọn được trên lịch.
+  const busyRanges = useMemo(() => {
+    const others = (allPeriodsQuery.data ?? []).filter(
+      (item) => item.id !== editing?.id,
+    )
+    return others.map((item) => ({
+      from: formatDateInput(item.startDate),
+      to: formatDateInput(item.endDate),
+    }))
+  }, [allPeriodsQuery.data, editing?.id])
+
+  // Tách sẵn hàm mutate (ổn định) để dùng trong cột.
+  const { mutate: reopenMutate } = reopenMutation
+  const { isPending: reopenPending } = reopenMutation
+
+  const columns = useMemo<ColumnDef<FiscalPeriod>[]>(
+    () => [
+      {
+        accessorKey: 'code',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Mã kỳ" />
+        ),
+        cell: ({ row }) => (
+          <span className="font-mono font-semibold">{row.original.code}</span>
+        ),
+      },
+      {
+        accessorKey: 'name',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Tên kỳ" />
+        ),
+        cell: ({ row }) => (
+          <div>
+            {row.original.name}
+            {row.original.notes ? (
+              <p className="text-muted-foreground mt-0.5 max-w-[280px] truncate text-xs">
+                {row.original.notes}
+              </p>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        id: 'range',
+        header: 'Khoảng thời gian',
+        enableSorting: false,
+        cell: ({ row }) => (
+          <span className="text-muted-foreground text-sm whitespace-nowrap">
+            {formatDate(row.original.startDate)} →{' '}
+            {formatDate(row.original.endDate)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Trạng thái" />
+        ),
+        cell: ({ row }) => {
+          const StatusIcon = STATUS_ICON[row.original.status]
+          return (
+            <Badge variant="outline" className={STATUS_BADGE[row.original.status]}>
+              <StatusIcon />
+              {FISCAL_PERIOD_STATUS_LABELS[row.original.status]}
+            </Badge>
+          )
+        },
+      },
+      {
+        id: 'stamp',
+        header: 'Mốc trạng thái',
+        enableSorting: false,
+        cell: ({ row }) => {
+          const period = row.original
+          const stamp =
+            period.status === 'closed'
+              ? period.closedAt
+              : period.status === 'locked'
+                ? period.lockedAt
+                : null
+          return (
+            <span className="text-muted-foreground text-sm">
+              {formatDateTime(stamp)}
+            </span>
+          )
+        },
+      },
+      {
+        id: 'actions',
+        header: () => <div className="text-right">Hành động</div>,
+        enableSorting: false,
+        cell: ({ row }) => {
+          const period = row.original
+          return (
+            <div className="text-right">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-8">
+                    <MoreHorizontal />
+                    <span className="sr-only">Hành động</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setBalancesTarget(period)}>
+                    <ListChecks />
+                    Xem số dư
+                  </DropdownMenuItem>
+                  {canManage && period.status === 'open' ? (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setEditing(period)
+                        setFormOpen(true)
+                      }}
+                    >
+                      <Pencil />
+                      Sửa kỳ
+                    </DropdownMenuItem>
+                  ) : null}
+                  {canManage && period.status === 'open' ? (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        setTransitionTarget({ period, action: 'lock' })
+                      }
+                    >
+                      <Lock />
+                      Tạm khóa kỳ
+                    </DropdownMenuItem>
+                  ) : null}
+                  {canManage && period.status === 'locked' ? (
+                    <DropdownMenuItem
+                      disabled={reopenPending}
+                      onClick={() => reopenMutate(period)}
+                    >
+                      <Unlock />
+                      Mở lại kỳ
+                    </DropdownMenuItem>
+                  ) : null}
+                  {canManage && period.status !== 'closed' ? (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        setTransitionTarget({ period, action: 'close' })
+                      }
+                    >
+                      <Archive />
+                      Chốt kỳ
+                    </DropdownMenuItem>
+                  ) : null}
+                  {isAdmin && period.status === 'open' ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => setDeleteTarget(period)}
+                      >
+                        <Trash2 />
+                        Xóa kỳ
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )
+        },
+      },
+    ],
+    [canManage, isAdmin, reopenMutate, reopenPending],
+  )
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -255,130 +424,7 @@ export function FiscalPeriodsPage() {
         ) : periods.length === 0 ? (
           <EmptyState message="Chưa có kỳ kế toán nào phù hợp." />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mã kỳ</TableHead>
-                <TableHead>Tên kỳ</TableHead>
-                <TableHead>Khoảng thời gian</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead>Mốc trạng thái</TableHead>
-                <TableHead className="text-right">Hành động</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {periods.map((period) => {
-                const StatusIcon = STATUS_ICON[period.status]
-                const stamp =
-                  period.status === 'closed'
-                    ? period.closedAt
-                    : period.status === 'locked'
-                      ? period.lockedAt
-                      : null
-
-                return (
-                  <TableRow key={period.id}>
-                    <TableCell className="font-mono font-semibold">
-                      {period.code}
-                    </TableCell>
-                    <TableCell>
-                      {period.name}
-                      {period.notes ? (
-                        <p className="text-muted-foreground mt-0.5 max-w-[280px] truncate text-xs">
-                          {period.notes}
-                        </p>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDate(period.startDate)} → {formatDate(period.endDate)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={STATUS_BADGE[period.status]}
-                      >
-                        <StatusIcon />
-                        {FISCAL_PERIOD_STATUS_LABELS[period.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDateTime(stamp)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="size-8">
-                            <MoreHorizontal />
-                            <span className="sr-only">Hành động</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => setBalancesTarget(period)}
-                          >
-                            <ListChecks />
-                            Xem số dư
-                          </DropdownMenuItem>
-                          {canManage && period.status === 'open' ? (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setEditing(period)
-                                setFormOpen(true)
-                              }}
-                            >
-                              <Pencil />
-                              Sửa kỳ
-                            </DropdownMenuItem>
-                          ) : null}
-                          {canManage && period.status === 'open' ? (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setTransitionTarget({ period, action: 'lock' })
-                              }
-                            >
-                              <Lock />
-                              Tạm khóa kỳ
-                            </DropdownMenuItem>
-                          ) : null}
-                          {canManage && period.status === 'locked' ? (
-                            <DropdownMenuItem
-                              disabled={reopenMutation.isPending}
-                              onClick={() => reopenMutation.mutate(period)}
-                            >
-                              <Unlock />
-                              Mở lại kỳ
-                            </DropdownMenuItem>
-                          ) : null}
-                          {canManage && period.status !== 'closed' ? (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setTransitionTarget({ period, action: 'close' })
-                              }
-                            >
-                              <Archive />
-                              Chốt kỳ
-                            </DropdownMenuItem>
-                          ) : null}
-                          {isAdmin && period.status === 'open' ? (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onClick={() => setDeleteTarget(period)}
-                              >
-                                <Trash2 />
-                                Xóa kỳ
-                              </DropdownMenuItem>
-                            </>
-                          ) : null}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+          <DataTable columns={columns} data={periods} />
         )}
       </Card>
 
@@ -387,6 +433,7 @@ export function FiscalPeriodsPage() {
         open={formOpen}
         onOpenChange={setFormOpen}
         period={editing}
+        busyRanges={busyRanges}
         onSaved={() => {
           setFormOpen(false)
           setEditing(null)

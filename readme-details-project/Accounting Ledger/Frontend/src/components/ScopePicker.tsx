@@ -1,7 +1,7 @@
 import dayjs from 'dayjs'
 import { CalendarRange } from 'lucide-react'
 
-import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Select,
   SelectContent,
@@ -59,24 +59,22 @@ export function ScopePicker({ periods, value, onChange }: ScopePickerProps) {
 
       {isCustom ? (
         <div className="flex items-center gap-2">
-          <Input
-            className="w-[150px]"
-            type="date"
-            aria-label="Từ ngày"
+          <DatePicker
+            ariaLabel="Từ ngày"
             value={value.fromDate ?? ''}
-            onChange={(event) =>
-              onChange({ fromDate: event.target.value, toDate: value.toDate })
+            onChange={(next) =>
+              onChange({ fromDate: next, toDate: value.toDate })
             }
+            placeholder="Từ ngày"
           />
           <span className="text-muted-foreground text-sm">→</span>
-          <Input
-            className="w-[150px]"
-            type="date"
-            aria-label="Đến ngày"
+          <DatePicker
+            ariaLabel="Đến ngày"
             value={value.toDate ?? ''}
-            onChange={(event) =>
-              onChange({ fromDate: value.fromDate, toDate: event.target.value })
+            onChange={(next) =>
+              onChange({ fromDate: value.fromDate, toDate: next })
             }
+            placeholder="Đến ngày"
           />
         </div>
       ) : null}

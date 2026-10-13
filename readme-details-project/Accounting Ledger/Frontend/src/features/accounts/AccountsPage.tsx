@@ -1,5 +1,6 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ColumnDef } from '@tanstack/react-table'
 import {
   CornerDownRight,
   ListTree,
@@ -18,6 +19,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table'
 import {
   Dialog,
   DialogContent,
@@ -290,17 +292,17 @@ export function AccountsPage() {
     return filterTree(nodes, match)
   }, [treeQuery.data, search, typeFilter, statusFilter])
 
-  const openCreate = (parentId: string | null = null) => {
+  const openCreate = useCallback((parentId: string | null = null) => {
     setEditing(null)
     setPresetParentId(parentId)
     setFormOpen(true)
-  }
+  }, [])
 
-  const openEdit = (account: AccountLike) => {
+  const openEdit = useCallback((account: AccountLike) => {
     setEditing(account)
     setPresetParentId(null)
     setFormOpen(true)
-  }
+  }, [])
 
   const handleSaved = () => {
     setFormOpen(false)
@@ -341,6 +343,96 @@ export function AccountsPage() {
     </Table>
   )
 
+  const columns = useMemo<ColumnDef<AccountLike>[]>(
+    () => [
+      {
+        accessorKey: 'code',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Mã" />
+        ),
+        cell: ({ row }) => (
+          <span className="font-mono font-semibold">{row.original.code}</span>
+        ),
+      },
+      {
+        accessorKey: 'name',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Tên" />
+        ),
+        cell: ({ row }) => row.original.name,
+      },
+      {
+        accessorKey: 'type',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Loại" />
+        ),
+        cell: ({ row }) => (
+          <Badge variant="outline" className={TYPE_BADGE[row.original.type]}>
+            {ACCOUNT_TYPE_LABELS[row.original.type]}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: 'isPostable',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Ghi sổ" />
+        ),
+        cell: ({ row }) =>
+          row.original.isPostable ? (
+            <Badge
+              variant="outline"
+              className="border-emerald-200 bg-emerald-50 text-emerald-700"
+            >
+              Ghi sổ
+            </Badge>
+          ) : (
+            <Badge variant="secondary">Tổng hợp</Badge>
+          ),
+      },
+      {
+        accessorKey: 'isActive',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Trạng thái" />
+        ),
+        cell: ({ row }) =>
+          row.original.isActive ? (
+            <Badge
+              variant="outline"
+              className="border-emerald-200 bg-emerald-50 text-emerald-700"
+            >
+              Hoạt động
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="border-rose-200 bg-rose-50 text-rose-700"
+            >
+              Ngừng
+            </Badge>
+          ),
+      },
+      {
+        id: 'actions',
+        header: () => <div className="text-right">Hành động</div>,
+        enableSorting: false,
+        cell: ({ row }) =>
+          isAdmin ? (
+            <div className="text-right">
+              <AccountActions
+                account={row.original}
+                onAddChild={(item) => openCreate(item.id)}
+                onEdit={openEdit}
+                onDelete={setDeleteTarget}
+              />
+            </div>
+          ) : (
+            <div className="text-muted-foreground text-right">—</div>
+          ),
+      },
+    ],
+    [isAdmin, openCreate, openEdit],
+  )
+
   const tableContent = listQuery.isLoading ? (
     <TableLoading />
   ) : listQuery.isError ? (
@@ -348,74 +440,7 @@ export function AccountsPage() {
   ) : (listQuery.data ?? []).length === 0 ? (
     <EmptyState message="Chưa có tài khoản nào phù hợp." />
   ) : (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Mã</TableHead>
-          <TableHead>Tên</TableHead>
-          <TableHead>Loại</TableHead>
-          <TableHead>Ghi sổ</TableHead>
-          <TableHead>Trạng thái</TableHead>
-          <TableHead className="text-right">Hành động</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {(listQuery.data ?? []).map((account) => (
-          <TableRow key={account.id}>
-            <TableCell className="font-mono font-semibold">
-              {account.code}
-            </TableCell>
-            <TableCell>{account.name}</TableCell>
-            <TableCell>
-              <Badge variant="outline" className={TYPE_BADGE[account.type]}>
-                {ACCOUNT_TYPE_LABELS[account.type]}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              {account.isPostable ? (
-                <Badge
-                  variant="outline"
-                  className="border-emerald-200 bg-emerald-50 text-emerald-700"
-                >
-                  Ghi sổ
-                </Badge>
-              ) : (
-                <Badge variant="secondary">Tổng hợp</Badge>
-              )}
-            </TableCell>
-            <TableCell>
-              {account.isActive ? (
-                <Badge
-                  variant="outline"
-                  className="border-emerald-200 bg-emerald-50 text-emerald-700"
-                >
-                  Hoạt động
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="border-rose-200 bg-rose-50 text-rose-700"
-                >
-                  Ngừng
-                </Badge>
-              )}
-            </TableCell>
-            <TableCell className="text-right">
-              {isAdmin ? (
-                <AccountActions
-                  account={account}
-                  onAddChild={(item) => openCreate(item.id)}
-                  onEdit={openEdit}
-                  onDelete={setDeleteTarget}
-                />
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              )}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <DataTable columns={columns} data={listQuery.data ?? []} />
   )
 
   return (

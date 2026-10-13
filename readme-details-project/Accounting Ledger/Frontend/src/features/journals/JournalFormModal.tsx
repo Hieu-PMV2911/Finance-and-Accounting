@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -314,11 +315,12 @@ export function JournalFormModal({
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="grid gap-2">
               <Label htmlFor="journal-date">Ngày hạch toán *</Label>
-              <Input
+              <DatePicker
                 id="journal-date"
-                type="date"
+                className="w-full"
                 value={date}
-                onChange={(event) => setDate(event.target.value)}
+                onChange={setDate}
+                placeholder="Chọn ngày"
               />
               {coveredPeriod ? (
                 <p className="text-muted-foreground text-xs">

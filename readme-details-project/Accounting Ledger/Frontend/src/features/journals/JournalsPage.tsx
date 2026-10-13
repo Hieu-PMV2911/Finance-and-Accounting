@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ColumnDef } from '@tanstack/react-table'
 import {
   ArrowLeftRight,
   BadgeCheck,
@@ -22,6 +23,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Dialog,
   DialogContent,
@@ -46,14 +49,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { apiErrorMessage } from '@/lib/api'
 import { formatDate, formatMoney } from '@/lib/format'
 import { hasRole, useAuthStore } from '@/stores/auth.store'
@@ -167,6 +162,192 @@ export function JournalsPage() {
   const draftCount = journals.filter((item) => item.status === 'draft').length
   const postedCount = journals.filter((item) => item.status === 'posted').length
 
+  // Tách sẵn hàm mutate (ổn định) để dùng trong cột.
+  const { mutate: approveMutate } = approveMutation
+  const { mutate: postMutate } = postMutation
+
+  const columns = useMemo<ColumnDef<JournalEntry>[]>(
+    () => [
+      {
+        accessorKey: 'entryNo',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Số hiệu" />
+        ),
+        cell: ({ row }) =>
+          row.original.entryNo ? (
+            <span className="font-mono text-sm font-semibold">
+              {row.original.entryNo}
+            </span>
+          ) : (
+            <Badge variant="secondary">Nháp</Badge>
+          ),
+      },
+      {
+        accessorKey: 'date',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Ngày" />
+        ),
+        cell: ({ row }) => (
+          <span className="text-muted-foreground text-sm">
+            {formatDate(row.original.date)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'description',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Diễn giải" />
+        ),
+        cell: ({ row }) => (
+          <>
+            <button
+              type="button"
+              className="hover:text-primary block max-w-[320px] truncate text-left text-sm"
+              onClick={() => setDetailId(row.original.id)}
+            >
+              {row.original.description}
+            </button>
+            {row.original.reference ? (
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                CT: {row.original.reference}
+              </p>
+            ) : null}
+          </>
+        ),
+      },
+      {
+        id: 'period',
+        header: 'Kỳ',
+        enableSorting: false,
+        cell: ({ row }) => (
+          <span className="text-muted-foreground font-mono text-sm">
+            {row.original.period?.code ?? '—'}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'totalDebit',
+        header: ({ column }) => (
+          <DataTableColumnHeader
+            column={column}
+            title="Số tiền"
+            className="w-full justify-end"
+          />
+        ),
+        cell: ({ row }) => (
+          <div className="text-right font-mono text-sm font-semibold tabular-nums">
+            {formatMoney(row.original.totalDebit)}
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Trạng thái" />
+        ),
+        cell: ({ row }) => (
+          <Badge variant="outline" className={STATUS_BADGE[row.original.status]}>
+            {JOURNAL_STATUS_LABELS[row.original.status]}
+          </Badge>
+        ),
+      },
+      {
+        id: 'actions',
+        header: () => <div className="text-right">Hành động</div>,
+        enableSorting: false,
+        cell: ({ row }) => {
+          const entry = row.original
+          return (
+            <div className="text-right">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-8">
+                    <MoreHorizontal />
+                    <span className="sr-only">Hành động</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setDetailId(entry.id)}>
+                    <Eye />
+                    Xem chi tiết
+                  </DropdownMenuItem>
+
+                  {canTrace ? (
+                    <DropdownMenuItem onClick={() => setTraceTarget(entry)}>
+                      <History />
+                      Truy vết
+                    </DropdownMenuItem>
+                  ) : null}
+
+                  {canMake && entry.status === 'draft' ? (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setEditing(entry)
+                        setFormOpen(true)
+                      }}
+                    >
+                      <Pencil />
+                      Sửa nháp
+                    </DropdownMenuItem>
+                  ) : null}
+
+                  {canApprove && entry.status === 'draft' ? (
+                    <DropdownMenuItem
+                      disabled={actionPending}
+                      onClick={() => approveMutate(entry)}
+                    >
+                      <BadgeCheck />
+                      Xác nhận
+                    </DropdownMenuItem>
+                  ) : null}
+
+                  {canPost && entry.status === 'approved' ? (
+                    <DropdownMenuItem
+                      disabled={actionPending}
+                      onClick={() => postMutate(entry)}
+                    >
+                      <BookCheck />
+                      Ghi sổ
+                    </DropdownMenuItem>
+                  ) : null}
+
+                  {canPost && entry.status === 'posted' ? (
+                    <DropdownMenuItem onClick={() => setReverseTarget(entry)}>
+                      <ArrowLeftRight />
+                      Đảo bút toán
+                    </DropdownMenuItem>
+                  ) : null}
+
+                  {canMake && entry.status === 'draft' ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => setDeleteTarget(entry)}
+                      >
+                        <Trash2 />
+                        Xóa nháp
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )
+        },
+      },
+    ],
+    [
+      actionPending,
+      approveMutate,
+      canApprove,
+      canMake,
+      canPost,
+      canTrace,
+      postMutate,
+    ],
+  )
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <PageHeader
@@ -246,18 +427,18 @@ export function JournalsPage() {
         </Select>
 
         <div className="flex items-center gap-2">
-          <Input
-            className="w-[150px]"
-            type="date"
+          <DatePicker
+            ariaLabel="Từ ngày"
             value={fromDate}
-            onChange={(event) => setFromDate(event.target.value)}
+            onChange={setFromDate}
+            placeholder="Từ ngày"
           />
           <span className="text-muted-foreground text-sm">→</span>
-          <Input
-            className="w-[150px]"
-            type="date"
+          <DatePicker
+            ariaLabel="Đến ngày"
             value={toDate}
-            onChange={(event) => setToDate(event.target.value)}
+            onChange={setToDate}
+            placeholder="Đến ngày"
           />
         </div>
       </div>
@@ -270,139 +451,7 @@ export function JournalsPage() {
         ) : journals.length === 0 ? (
           <EmptyState message="Chưa có bút toán nào phù hợp." />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Số hiệu</TableHead>
-                <TableHead>Ngày</TableHead>
-                <TableHead>Diễn giải</TableHead>
-                <TableHead>Kỳ</TableHead>
-                <TableHead className="text-right">Số tiền</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead className="text-right">Hành động</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {journals.map((entry) => (
-                <TableRow key={entry.id}>
-                  <TableCell>
-                    {entry.entryNo ? (
-                      <span className="font-mono text-sm font-semibold">
-                        {entry.entryNo}
-                      </span>
-                    ) : (
-                      <Badge variant="secondary">Nháp</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {formatDate(entry.date)}
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      className="hover:text-primary max-w-[320px] truncate text-left text-sm"
-                      onClick={() => setDetailId(entry.id)}
-                    >
-                      {entry.description}
-                    </button>
-                    {entry.reference ? (
-                      <p className="text-muted-foreground mt-0.5 text-xs">
-                        CT: {entry.reference}
-                      </p>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground font-mono text-sm">
-                    {entry.period?.code ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm font-semibold tabular-nums">
-                    {formatMoney(entry.totalDebit)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={STATUS_BADGE[entry.status]}>
-                      {JOURNAL_STATUS_LABELS[entry.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="size-8">
-                          <MoreHorizontal />
-                          <span className="sr-only">Hành động</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setDetailId(entry.id)}>
-                          <Eye />
-                          Xem chi tiết
-                        </DropdownMenuItem>
-
-                        {canTrace ? (
-                          <DropdownMenuItem onClick={() => setTraceTarget(entry)}>
-                            <History />
-                            Truy vết
-                          </DropdownMenuItem>
-                        ) : null}
-
-                        {canMake && entry.status === 'draft' ? (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditing(entry)
-                              setFormOpen(true)
-                            }}
-                          >
-                            <Pencil />
-                            Sửa nháp
-                          </DropdownMenuItem>
-                        ) : null}
-
-                        {canApprove && entry.status === 'draft' ? (
-                          <DropdownMenuItem
-                            disabled={actionPending}
-                            onClick={() => approveMutation.mutate(entry)}
-                          >
-                            <BadgeCheck />
-                            Xác nhận
-                          </DropdownMenuItem>
-                        ) : null}
-
-                        {canPost && entry.status === 'approved' ? (
-                          <DropdownMenuItem
-                            disabled={actionPending}
-                            onClick={() => postMutation.mutate(entry)}
-                          >
-                            <BookCheck />
-                            Ghi sổ
-                          </DropdownMenuItem>
-                        ) : null}
-
-                        {canPost && entry.status === 'posted' ? (
-                          <DropdownMenuItem
-                            onClick={() => setReverseTarget(entry)}
-                          >
-                            <ArrowLeftRight />
-                            Đảo bút toán
-                          </DropdownMenuItem>
-                        ) : null}
-
-                        {canMake && entry.status === 'draft' ? (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() => setDeleteTarget(entry)}
-                            >
-                              <Trash2 />
-                              Xóa nháp
-                            </DropdownMenuItem>
-                          </>
-                        ) : null}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <DataTable columns={columns} data={journals} />
         )}
       </Card>
 

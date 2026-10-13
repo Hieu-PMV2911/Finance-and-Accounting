@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Label } from '@/components/ui/label'
 import {
   Table,
@@ -111,11 +111,12 @@ export function ReverseJournalDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="reverse-date">Ngày hạch toán bút toán đảo</Label>
-            <Input
+            <DatePicker
               id="reverse-date"
-              type="date"
+              className="w-full"
               value={date}
-              onChange={(event) => setDate(event.target.value)}
+              onChange={setDate}
+              placeholder="Mặc định theo bút toán gốc"
             />
             <p className="text-muted-foreground text-xs">
               Bỏ trống thì dùng ngày của bút toán gốc ({formatDateInput(entry?.date)}).

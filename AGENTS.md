@@ -239,8 +239,18 @@ D:\TC_KT\
     Muốn thêm màu/bo góc → sửa token, **KHÔNG hardcode mã màu** trong component.
   - Primitive có sẵn ở `src/components/ui/`: `button`, `card`, `input`, `textarea`, `label`,  
     `select`, `checkbox`, `dialog`, `table`, `tabs`, `badge`, `avatar`, `separator`,  
-    `skeleton`, `alert`, `dropdown-menu`, `sonner`. Cần thêm → tạo file mới trong thư mục đó  
+    `skeleton`, `alert`, `dropdown-menu`, `sonner`, `sidebar`, `sheet`, `tooltip`, `popover`,  
+    `calendar`, `date-picker`, `data-table`. Cần thêm → tạo file mới trong thư mục đó  
     theo đúng chuẩn shadcn (giữ nguyên cấu trúc `cva` + `data-slot`).
+  - **Bảng danh sách dùng `DataTable`** (`@/components/ui/data-table`) — TanStack Table v8,  
+    `pageSize` mặc định **10**, chân bảng có dãy nút số trang + chọn số dòng/trang. Đừng tự  
+    viết lại `<Table>` cho các trang danh sách; bảng báo cáo/trial balance thì vẫn dùng `<Table>`.
+  - **Mọi ô chọn ngày dùng `DatePicker`** (`@/components/ui/date-picker`, Popover + `Calendar`  
+    của shadcn, locale `vi`). **KHÔNG** dùng `<input type="date">` — giá trị vào/ra luôn là  
+    chuỗi `YYYY-MM-DD` (dùng `formatDateInput` khi cần).
+  - **Sidebar** là component shadcn (`SidebarProvider` + `Sidebar collapsible="icon"` +  
+    `SidebarInset`) trong `Layout.tsx`; menu khai báo theo nhóm ở `NAV_GROUPS`, mục `adminOnly`  
+    tự ẩn với người dùng không phải admin.
   - Ghép class bằng `cn()` (`@/lib/utils` = clsx + tailwind-merge); biến thể bằng `cva`.
   - Icon dùng `lucide-react`; thông báo dùng `toast` của `sonner` (`<Toaster />` đã gắn ở `App.tsx`).
   - Alias `@/` → `src/` (khai báo ở `vite.config.ts` + `tsconfig.app.json`), KHÔNG viết  

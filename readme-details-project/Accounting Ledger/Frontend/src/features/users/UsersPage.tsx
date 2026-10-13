@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ColumnDef } from '@tanstack/react-table'
 import {
   KeyRound,
   LoaderCircle,
@@ -20,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table'
 import {
   Dialog,
   DialogContent,
@@ -37,14 +39,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { apiErrorMessage } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
 import { ROLES, ROLE_LABELS, type Role, type User } from '@/types/api'
@@ -351,6 +345,131 @@ export function UsersPage() {
     invalidate()
   }
 
+  // Tách sẵn các phần ổn định của mutation để dùng trong cột (tránh phụ thuộc cả object).
+  const { isPending: togglePending, mutate: toggleUserActive } = toggleMutation
+
+  const columns = useMemo<ColumnDef<User>[]>(
+    () => [
+      {
+        accessorKey: 'email',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Email" />
+        ),
+        cell: ({ row }) => (
+          <span className="font-medium">{row.original.email}</span>
+        ),
+      },
+      {
+        accessorKey: 'fullName',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Họ tên" />
+        ),
+        cell: ({ row }) =>
+          row.original.fullName ?? (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: 'roles',
+        header: 'Vai trò',
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-1">
+            {row.original.roles.map((role) => (
+              <Badge
+                key={role}
+                variant="outline"
+                className="border-blue-200 bg-blue-50 text-blue-700"
+              >
+                <ShieldCheck />
+                {ROLE_LABELS[role]}
+              </Badge>
+            ))}
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'isActive',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Trạng thái" />
+        ),
+        cell: ({ row }) =>
+          row.original.isActive ? (
+            <Badge
+              variant="outline"
+              className="border-emerald-200 bg-emerald-50 text-emerald-700"
+            >
+              Hoạt động
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="border-rose-200 bg-rose-50 text-rose-700"
+            >
+              Đã khóa
+            </Badge>
+          ),
+      },
+      {
+        accessorKey: 'lastLoginAt',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Đăng nhập cuối" />
+        ),
+        cell: ({ row }) => (
+          <span className="text-muted-foreground text-sm">
+            {formatDateTime(row.original.lastLoginAt)}
+          </span>
+        ),
+      },
+      {
+        id: 'actions',
+        header: () => <div className="text-right">Hành động</div>,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className="text-right">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-8">
+                  <MoreHorizontal />
+                  <span className="sr-only">Hành động</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    setEditing(row.original)
+                    setFormOpen(true)
+                  }}
+                >
+                  <Pencil />
+                  Sửa
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setResetTarget(row.original)}>
+                  <KeyRound />
+                  Đặt lại mật khẩu
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={togglePending}
+                  onClick={() =>
+                    toggleUserActive({
+                      id: row.original.id,
+                      isActive: !row.original.isActive,
+                    })
+                  }
+                >
+                  {row.original.isActive ? <Lock /> : <Unlock />}
+                  {row.original.isActive ? 'Khóa tài khoản' : 'Mở khóa'}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ),
+      },
+    ],
+    [togglePending, toggleUserActive],
+  )
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <PageHeader
@@ -377,102 +496,7 @@ export function UsersPage() {
         ) : (usersQuery.data ?? []).length === 0 ? (
           <EmptyState message="Chưa có người dùng nào." />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead>Họ tên</TableHead>
-                <TableHead>Vai trò</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead>Đăng nhập cuối</TableHead>
-                <TableHead className="text-right">Hành động</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(usersQuery.data ?? []).map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.email}</TableCell>
-                  <TableCell>
-                    {item.fullName ?? (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {item.roles.map((role) => (
-                        <Badge
-                          key={role}
-                          variant="outline"
-                          className="border-blue-200 bg-blue-50 text-blue-700"
-                        >
-                          <ShieldCheck />
-                          {ROLE_LABELS[role]}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {item.isActive ? (
-                      <Badge
-                        variant="outline"
-                        className="border-emerald-200 bg-emerald-50 text-emerald-700"
-                      >
-                        Hoạt động
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant="outline"
-                        className="border-rose-200 bg-rose-50 text-rose-700"
-                      >
-                        Đã khóa
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {formatDateTime(item.lastLoginAt)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="size-8">
-                          <MoreHorizontal />
-                          <span className="sr-only">Hành động</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setEditing(item)
-                            setFormOpen(true)
-                          }}
-                        >
-                          <Pencil />
-                          Sửa
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setResetTarget(item)}>
-                          <KeyRound />
-                          Đặt lại mật khẩu
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          disabled={toggleMutation.isPending}
-                          onClick={() =>
-                            toggleMutation.mutate({
-                              id: item.id,
-                              isActive: !item.isActive,
-                            })
-                          }
-                        >
-                          {item.isActive ? <Lock /> : <Unlock />}
-                          {item.isActive ? 'Khóa tài khoản' : 'Mở khóa'}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <DataTable columns={columns} data={usersQuery.data ?? []} />
         )}
       </Card>
 

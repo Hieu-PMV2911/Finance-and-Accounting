@@ -4,7 +4,8 @@ import {
   BookMarked,
   BookOpen,
   CalendarRange,
-  ChevronDown,
+  ChevronRight,
+  ChevronsUpDown,
   FileBarChart,
   Landmark,
   LayoutDashboard,
@@ -14,10 +15,9 @@ import {
   UserCog,
   Users,
 } from 'lucide-react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,8 +26,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from '@/components/ui/sidebar'
 import { logout as logoutApi } from '@/features/auth/auth.api'
-import { cn } from '@/lib/utils'
 import { hasRole, useAuthStore } from '@/stores/auth.store'
 import { ROLE_LABELS } from '@/types/api'
 
@@ -41,36 +56,64 @@ interface NavItem {
   adminOnly?: boolean
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Tổng quan', icon: LayoutDashboard, end: true },
-  { to: '/journals', label: 'Bút toán', icon: ScrollText },
-  { to: '/periods', label: 'Kỳ kế toán', icon: CalendarRange },
-  { to: '/ledger', label: 'Sổ cái', icon: BookMarked },
-  { to: '/reports', label: 'Báo cáo tài chính', icon: FileBarChart },
-  { to: '/accounts', label: 'Tài khoản kế toán', icon: BookOpen },
-  { to: '/users', label: 'Người dùng', icon: Users, adminOnly: true },
-  { to: '/audit', label: 'Kiểm toán', icon: ShieldCheck, adminOnly: true },
-  { to: '/profile', label: 'Hồ sơ của tôi', icon: UserCog },
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Kế toán',
+    items: [
+      { to: '/', label: 'Tổng quan', icon: LayoutDashboard, end: true },
+      { to: '/journals', label: 'Bút toán', icon: ScrollText },
+      { to: '/periods', label: 'Kỳ kế toán', icon: CalendarRange },
+      { to: '/ledger', label: 'Sổ cái', icon: BookMarked },
+      { to: '/reports', label: 'Báo cáo tài chính', icon: FileBarChart },
+    ],
+  },
+  {
+    label: 'Danh mục',
+    items: [{ to: '/accounts', label: 'Tài khoản kế toán', icon: BookOpen }],
+  },
+  {
+    label: 'Quản trị',
+    items: [
+      { to: '/users', label: 'Người dùng', icon: Users, adminOnly: true },
+      { to: '/audit', label: 'Kiểm toán', icon: ShieldCheck, adminOnly: true },
+    ],
+  },
 ]
 
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  cn(
-    'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-    isActive
-      ? 'bg-primary/10 text-primary'
-      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+/** Bỏ các mục chỉ dành cho admin khi người dùng hiện tại không phải admin. */
+function useVisibleGroups() {
+  const user = useAuthStore((state) => state.user)
+  const isAdmin = hasRole(user, 'admin')
+
+  return NAV_GROUPS.map((group) => ({
+    label: group.label,
+    items: group.items.filter((item) => !item.adminOnly || isAdmin),
+  })).filter((group) => group.items.length > 0)
+}
+
+/** Mục menu đang mở, dùng để hiển thị tiêu đề trên thanh header. */
+function currentTitle(pathname: string) {
+  const all = NAV_GROUPS.flatMap((group) => group.items)
+  const match = all.find((item) =>
+    item.end ? pathname === item.to : pathname.startsWith(item.to),
   )
+  return match?.label ?? 'Accounting Ledger'
+}
 
 export function Layout() {
   const user = useAuthStore((state) => state.user)
   const refreshToken = useAuthStore((state) => state.refreshToken)
   const clear = useAuthStore((state) => state.clear)
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
 
-  const items = NAV_ITEMS.filter(
-    (item) => !item.adminOnly || hasRole(user, 'admin'),
-  )
+  const groups = useVisibleGroups()
 
   const handleLogout = async () => {
     try {
@@ -88,109 +131,136 @@ export function Layout() {
   const initials = user?.email?.charAt(0).toUpperCase() ?? '?'
   const roleText = user?.roles.map((role) => ROLE_LABELS[role]).join(', ') ?? ''
 
+  const isItemActive = (item: NavItem) =>
+    item.end
+      ? location.pathname === item.to
+      : location.pathname === item.to ||
+        location.pathname.startsWith(`${item.to}/`)
+
   return (
-    <div className="bg-muted/30 flex min-h-screen">
-      <aside className="bg-sidebar hidden w-64 shrink-0 flex-col border-r md:flex">
-        <div className="flex h-16 items-center gap-3 border-b px-5">
-          <div className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-lg">
-            <Landmark className="size-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">Accounting Ledger</p>
-            <p className="text-muted-foreground text-xs">Sổ cái kế toán kép</p>
-          </div>
-        </div>
-
-        <nav className="flex flex-1 flex-col gap-1 p-3">
-          {items.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
-              <item.icon className="size-4" />
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="text-muted-foreground border-t p-4 text-xs">
-          API: <code className="text-foreground">/api</code> · Swagger{' '}
-          <code className="text-foreground">/api/docs</code>
-        </div>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="bg-background/95 sticky top-0 z-20 flex h-16 items-center gap-3 border-b px-4 backdrop-blur md:px-6">
-          <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg md:hidden">
-            <Landmark className="size-4" />
-          </div>
-
-          <div className="min-w-0 md:hidden">
-            <p className="truncate text-sm font-semibold">Accounting Ledger</p>
-          </div>
-
-          <div className="ml-auto flex items-center gap-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-10 gap-2 px-2">
-                  <Avatar className="size-8">
-                    <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="hidden text-left sm:block">
-                    <p className="max-w-[180px] truncate text-sm font-medium">
-                      {user?.email ?? 'Người dùng'}
-                    </p>
-                    <p className="text-muted-foreground text-xs">{roleText}</p>
+    <SidebarProvider>
+      <Sidebar collapsible="icon">
+        <SidebarHeader>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild>
+                <NavLink to="/">
+                  <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                    <Landmark className="size-4" />
                   </div>
-                  <ChevronDown className="text-muted-foreground size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="font-normal">
-                  <p className="truncate text-sm font-medium">{user?.email}</p>
-                  <p className="text-muted-foreground text-xs">{roleText}</p>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate('/profile')}>
-                  <UserCog />
-                  Hồ sơ của tôi
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={handleLogout}>
-                  <LogOut />
-                  Đăng xuất
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold">
+                      Accounting Ledger
+                    </span>
+                    <span className="text-muted-foreground truncate text-xs">
+                      Sổ cái kế toán kép
+                    </span>
+                  </div>
+                </NavLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+
+        <SidebarContent>
+          {groups.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map((item) => (
+                    <SidebarMenuItem key={item.to}>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.label}
+                        isActive={isItemActive(item)}
+                      >
+                        <NavLink to={item.to} end={item.end}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </SidebarContent>
+
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton
+                    size="lg"
+                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  >
+                    <Avatar className="size-8 rounded-lg">
+                      <AvatarFallback className="bg-primary/10 text-primary rounded-lg text-xs font-semibold">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="grid flex-1 text-left text-sm leading-tight">
+                      <span className="truncate font-medium">
+                        {user?.email ?? 'Người dùng'}
+                      </span>
+                      <span className="text-muted-foreground truncate text-xs">
+                        {roleText}
+                      </span>
+                    </div>
+                    <ChevronsUpDown className="ml-auto size-4" />
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                  side="top"
+                  align="start"
+                  sideOffset={4}
+                >
+                  <DropdownMenuLabel className="font-normal">
+                    <p className="truncate text-sm font-medium">{user?.email}</p>
+                    <p className="text-muted-foreground text-xs">{roleText}</p>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate('/profile')}>
+                    <UserCog />
+                    Hồ sơ của tôi
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={handleLogout}>
+                    <LogOut />
+                    Đăng xuất
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+
+        <SidebarRail />
+      </Sidebar>
+
+      <SidebarInset className="bg-muted/30">
+        <header className="bg-background/95 sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b px-4 backdrop-blur">
+          <SidebarTrigger className="-ml-1" />
+          <div className="bg-border mx-1 h-4 w-px" />
+          <div className="flex min-w-0 items-center gap-1.5 text-sm">
+            <span className="text-muted-foreground hidden sm:inline">
+              Accounting Ledger
+            </span>
+            <ChevronRight className="text-muted-foreground hidden size-3.5 sm:inline" />
+            <span className="truncate font-medium">
+              {currentTitle(location.pathname)}
+            </span>
           </div>
         </header>
 
-        <div className="bg-background overflow-x-auto border-b px-3 py-2 md:hidden">
-          <div className="flex items-center gap-1">
-            {items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  cn(
-                    'flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium',
-                    isActive
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground',
-                  )
-                }
-              >
-                <item.icon className="size-4" />
-                {item.label}
-              </NavLink>
-            ))}
-          </div>
-        </div>
-
-        <main className="flex-1 p-4 md:p-6">
+        <div className="flex-1 p-4 md:p-6">
           <Outlet />
-        </main>
-      </div>
-    </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

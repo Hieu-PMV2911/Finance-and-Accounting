@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -94,6 +95,11 @@ interface FiscalPeriodFormModalProps {
   onOpenChange: (open: boolean) => void
   /** null = tạo mới, ngược lại là sửa (chỉ kỳ đang mở mới sửa được). */
   period: FiscalPeriod | null
+  /**
+   * Khoảng ngày đã thuộc kỳ kế toán khác (`YYYY-MM-DD`) — bị chặn chọn trên lịch
+   * vì các kỳ không được chồng lấn nhau.
+   */
+  busyRanges?: { from: string; to: string }[]
   onSaved: () => void
 }
 
@@ -107,6 +113,7 @@ export function FiscalPeriodFormModal({
   open,
   onOpenChange,
   period,
+  busyRanges,
   onSaved,
 }: FiscalPeriodFormModalProps) {
   const [code, setCode] = useState(period?.code ?? '')
@@ -234,24 +241,35 @@ export function FiscalPeriodFormModal({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="period-start">Ngày bắt đầu *</Label>
-              <Input
+              <DatePicker
                 id="period-start"
-                type="date"
+                className="w-full"
                 value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
+                onChange={setStartDate}
+                disabledRanges={busyRanges}
+                placeholder="Chọn ngày bắt đầu"
               />
             </div>
 
             <div className="grid gap-2">
               <Label htmlFor="period-end">Ngày kết thúc *</Label>
-              <Input
+              <DatePicker
                 id="period-end"
-                type="date"
+                className="w-full"
                 value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
+                onChange={setEndDate}
+                disabledRanges={busyRanges}
+                placeholder="Chọn ngày kết thúc"
               />
             </div>
           </div>
+
+          {busyRanges && busyRanges.length > 0 ? (
+            <p className="text-muted-foreground text-xs">
+              Ngày bị làm mờ đã thuộc một kỳ kế toán khác nên không chọn được —
+              các kỳ không được chồng lấn nhau.
+            </p>
+          ) : null}
 
           <div className="grid gap-2">
             <Label htmlFor="period-notes">Ghi chú</Label>
