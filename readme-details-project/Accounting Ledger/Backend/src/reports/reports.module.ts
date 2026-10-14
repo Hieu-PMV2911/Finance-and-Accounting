@@ -12,6 +12,8 @@ import { ReportsService } from './reports.service.js';
   imports: [TypeOrmModule.forFeature([JournalLine, Account, FiscalPeriod])],
   controllers: [ReportsController],
   providers: [ReportsService, ReportExportService],
-  exports: [ReportsService],
+  // `ReportExportService` được export để job sinh báo cáo nền (mục 9) tái sử dụng
+  // đúng phần dựng file thay vì tự viết lại phần xuất Excel/PDF.
+  exports: [ReportsService, ReportExportService],
 })
 export class ReportsModule {}

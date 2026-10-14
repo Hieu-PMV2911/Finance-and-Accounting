@@ -59,6 +59,21 @@ const ProfilePage = lazy(() =>
     default: module.ProfilePage,
   })),
 )
+const JobsPage = lazy(() =>
+  import('@/features/jobs/JobsPage').then((module) => ({
+    default: module.JobsPage,
+  })),
+)
+const NotificationsPage = lazy(() =>
+  import('@/features/notifications/NotificationsPage').then((module) => ({
+    default: module.NotificationsPage,
+  })),
+)
+const WebhooksPage = lazy(() =>
+  import('@/features/webhooks/WebhooksPage').then((module) => ({
+    default: module.WebhooksPage,
+  })),
+)
 
 function App() {
   return (
@@ -77,6 +92,14 @@ function App() {
                 <Route path="reports" element={<ReportsPage />} />
                 <Route path="accounts" element={<AccountsPage />} />
                 <Route path="profile" element={<ProfilePage />} />
+                <Route path="jobs" element={<JobsPage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
+                <Route
+                  path="webhooks"
+                  element={<ProtectedRoute roles={['admin']} />}
+                >
+                  <Route index element={<WebhooksPage />} />
+                </Route>
                 <Route
                   path="users"
                   element={<ProtectedRoute roles={['admin']} />}

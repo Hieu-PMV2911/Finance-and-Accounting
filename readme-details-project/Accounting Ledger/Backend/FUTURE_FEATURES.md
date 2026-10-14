@@ -75,10 +75,47 @@
   trả về bút toán, các dòng định khoản, số chứng từ gốc và vết kiểm toán của bút toán.
 - ✅ Vết theo một bản ghi — `GET /api/audit-logs/trace/:entity/:entityId` (cũ → mới).
 
-## 9. Xử lý bất đồng bộ (Queue + Schedule)
-- Job định kỳ: chốt số dư, kiểm tra bất biến, nhắc công nợ.
-- Job nền: sinh báo cáo nặng, gửi thông báo, retry khi lỗi.
-- Webhook + retry + xử lý kết quả đến trễ (nền tảng cho Payment & Reconciliation).
+## 9. Xử lý bất đồng bộ (Queue + Schedule) — ✅ đã triển khai
+- ✅ **Job định kỳ** (`@nestjs/schedule`, module `jobs`):
+  - `balance-snapshot` — 01:00 hằng ngày: **chốt số dư** kỳ đang mở (tái lập từ
+    `journal_lines`, đối chiếu `account_balances`, tính Σ phát sinh Nợ/Có).
+    Mặc định **chỉ báo cáo**; ghi lại số dư phải truyền `repair = true`.
+  - `integrity-check` — 02:30 hằng ngày: **kiểm tra 7 bất biến** (Σ Nợ = Σ Có,
+    số dư tái lập được, kỳ đã khóa/chốt, dòng mồ côi, số tiền sai quy tắc, ghi
+    vào tài khoản cha, số hiệu trùng). Có vi phạm ⇒ thông báo cho `admin` +
+    webhook `integrity.violation`.
+  - `debt-reminder` — 08:00 thứ Hai: **nhắc công nợ** theo số dư tài khoản
+    131 (phải thu) và 331 (phải trả) ⇒ sinh thông báo. ⏳ Tuổi nợ theo từng
+    khách/nhà cung cấp cần dữ liệu hóa đơn của Mini ERP (mục 10).
+  - `webhook-retry-sweep` — mỗi 5 phút: đẩy lại webhook `pending` bị mất job.
+- ✅ **Job nền (BullMQ)** — 4 hàng đợi, mỗi hàng một processor:
+  `reports` (sinh báo cáo nặng / xuất Excel-PDF), `maintenance` (chốt số dư,
+  kiểm tra bất biến, quét webhook), `notifications` (ghi thông báo, nhắc công
+  nợ), `webhooks` (giao webhook). Retry theo backoff cấu hình riêng từng hàng.
+- ✅ **Lịch sử & thử lại**: mọi lượt chạy ghi vào `job_runs` (trạng thái, số lần
+  thử, payload, kết quả, lỗi, thời lượng) — `jobId` của BullMQ chính là id dòng
+  này, nên trạng thái **bền qua restart** và API `POST /jobs/runs/:id/retry`
+  xếp lại từ payload đã lưu.
+- ✅ **Thông báo trong hệ thống** (`notifications`): job nền ghi thông báo thay vì
+  gửi email/SMS (không cần dịch vụ ngoài); phạm vi hiển thị theo người nhận và
+  vai trò. ⏳ Gửi email/Zalo thật.
+- ✅ **Webhook + retry + xử lý kết quả đến trễ**:
+  - `webhook_endpoints` — đăng ký nơi nhận, ký **HMAC-SHA256**
+    (`x-webhook-signature: sha256=<hex>`).
+  - `webhook_deliveries` — mỗi sự kiện một dòng giao cho từng endpoint, chống
+    giao trùng theo `<sự kiện>:<đối tượng>:<endpoint>`; ghi mã HTTP, body trả về,
+    lỗi và thời điểm thử kế tiếp; `POST /webhooks/deliveries/:id/retry` để gửi lại.
+  - `webhook_events` — webhook **nhận vào** (`POST /webhooks/inbound`): idempotent
+    theo `id` sự kiện (trùng lặp trả 200 để bên gửi ngừng retry) và phát hiện
+    **kết quả đến trễ** (sự kiện cũ hơn sự kiện đã xử lý của cùng đối tượng ⇒
+    ghi nhận `late`, giữ vết nhưng **không** ghi đè nghiệp vụ).
+- ✅ **API & UI**: `GET /jobs/overview|queues|schedules|runs`, `POST /jobs/reports`,
+  `POST /jobs/integrity-checks`, `POST /jobs/balance-snapshot`,
+  `POST /jobs/schedules/:name/trigger`, `POST /jobs/runs/:id/retry`,
+  `GET /jobs/runs/:id/download`; `/notifications` và `/webhooks` (chỉ `admin`).
+  FE: trang **Xử lý bất đồng bộ**, **Thông báo**, **Webhook**.
+- ⏳ Còn lại: dead-letter queue riêng cho job thất bại vĩnh viễn, gửi email/SMS,
+  Bull Board/UI giám sát chuyên sâu, và định kỳ dọn file báo cáo cũ.
 
 ## 10. Mở rộng (dài hạn)
 - **Mini ERP:** Customer/Vendor, Sales Invoice, Vendor Bill, công nợ, thanh toán một phần.

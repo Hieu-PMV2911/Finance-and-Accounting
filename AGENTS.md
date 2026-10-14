@@ -54,7 +54,7 @@ D:\TC_KT\
         │       ├── stores\        ← auth.store.ts (zustand + persist)
         │       ├── components\    ← Layout, ProtectedRoute, PageHeader, DataStates
         │       │   └── ui\        ← shadcn primitives (button, card, dialog, table, …)
-        │       └── features\      ← auth | accounts | users | profile | dashboard
+        │       └── features\      ← auth | accounts | users | profile | dashboard | periods | journals | ledger | reports | audit | jobs (mục 9) | notifications | webhooks
         └── Backend\               ← NestJS 12 (ESM)
             ├── FUTURE_FEATURES.md
             ├── .env / .env.example
@@ -69,6 +69,7 @@ D:\TC_KT\
                 ├── journals\      ← JournalEntry, JournalLine (draft→approved→posted→reversed)
                 ├── reports\       ← ReportsService (P&L, Balance Sheet, Cash Flow) + ReportExportService (xlsx/pdf)
                 ├── audit\         ← AuditLog + AuditSubscriber (ghi vết tự động) + truy vết chứng từ
+                ├── jobs\         ← Mục 9: job_runs/notifications/webhook_* + 4 processor BullMQ + jobs.scheduler (cron)
                 ├── app.module.ts  ← wire ConfigModule/TypeORM/Schedule/BullMQ + APP_GUARD + APP_INTERCEPTOR
                 ├── main.ts        ← prefix /api, CORS, ValidationPipe, Swagger /api/docs
                 └── seed.ts        ← tạo admin đầu tiên (pnpm seed)
@@ -379,6 +380,55 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 > transaction** với thao tác nghiệp vụ; danh tính lấy từ `AsyncLocalStorage` (`AuditContextInterceptor`).  
 > Bảng loại trừ: `audit_logs`, `account_balances`, `refresh_tokens`.
 
+**Jobs** (`/api/jobs`, mục 9 — xử lý bất đồng bộ: hàng đợi BullMQ + cron):
+
+| Method | Route                             | Quyền             | Ghi chú                                                                                        |
+| ------ | --------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------- |
+| GET    | `/api/jobs/overview`              | đã đăng nhập      | số đếm hàng đợi (Redis) + số lượt chạy theo trạng thái + cron có bật không                     |
+| GET    | `/api/jobs/queues`                | đã đăng nhập      | số job waiting/active/completed/failed/delayed của 4 hàng đợi                                  |
+| GET    | `/api/jobs/schedules`             | đã đăng nhập      | danh mục cron + lần chạy gần nhất/kế tiếp                                                      |
+| POST   | `/api/jobs/schedules/:name/trigger` | **admin, poster** | chạy ngay một lịch (**201**)                                                                    |
+| GET    | `/api/jobs/runs`                  | đã đăng nhập      | lọc `queue`/`status`/`trigger`/`jobName`/`triggeredBy`; `limit`≤200, `offset`                   |
+| GET    | `/api/jobs/runs/:id`              | đã đăng nhập      | chi tiết lượt chạy (payload, kết quả, lỗi)                                                      |
+| POST   | `/api/jobs/runs/:id/retry`        | **admin, poster** | thử lại job **đã thất bại**, xếp lượt mới từ payload đã lưu (**201**)                           |
+| GET    | `/api/jobs/runs/:id/download`     | đã đăng nhập      | tải file báo cáo do job sinh ra (`StreamableFile`)                                              |
+| POST   | `/api/jobs/reports`               | đã đăng nhập      | xếp job sinh báo cáo nền (`kind`, `format?`, theo `periodId` hoặc `fromDate`/`toDate`) (**201**) |
+| POST   | `/api/jobs/integrity-checks`      | **admin**         | chạy 7 kiểm tra bất biến ngay (**201**)                                                         |
+| POST   | `/api/jobs/balance-snapshot`      | **admin, poster** | chốt/đối chiếu số dư một kỳ; `repair=true` mới ghi lại số dư (**201**)                          |
+
+> Mọi lượt chạy ghi vào **`job_runs`**; `jobId` của BullMQ = id dòng này (riêng webhook là id
+> dòng giao) nên trạng thái bền qua restart. Bảng vận hành (`job_runs`, `notifications`,
+> `webhook_deliveries`, `webhook_events`) **không** ghi vết kiểm toán — chúng đã là nhật ký.
+
+**Notifications** (`/api/notifications`, mục 9 — đầu ra của job nền):
+
+| Method | Route                            | Quyền        | Ghi chú                                                        |
+| ------ | -------------------------------- | ------------ | -------------------------------------------------------------- |
+| GET    | `/api/notifications`             | đã đăng nhập | lọc `type`/`status`/`severity`/`search`; lọc theo người nhận + vai trò |
+| GET    | `/api/notifications/unread-count` | đã đăng nhập | số chưa đọc (badge)                                            |
+| POST   | `/api/notifications/read-all`    | đã đăng nhập | đánh dấu đã đọc mọi thông báo nhìn thấy được                    |
+| POST   | `/api/notifications/:id/read`    | đã đăng nhập | đánh dấu một thông báo đã đọc                                   |
+
+**Webhooks** (`/api/webhooks`, mục 9 — chỉ **admin**, trừ route `inbound` là public+HMAC):
+
+| Method | Route                                    | Quyền  | Ghi chú                                                                     |
+| ------ | ---------------------------------------- | ------ | --------------------------------------------------------------------------- |
+| GET    | `/api/webhooks/endpoints`                | admin  | danh sách endpoint (không bao giờ trả `secret`)                             |
+| POST   | `/api/webhooks/endpoints`                | admin  | đăng ký endpoint; bỏ trống `secret` ⇒ tự sinh (**201**)                      |
+| GET    | `/api/webhooks/endpoints/:id`            | admin  | chi tiết endpoint                                                            |
+| PATCH  | `/api/webhooks/endpoints/:id`            | admin  | đổi URL/sự kiện/bật-tắt/khóa ký                                             |
+| DELETE | `/api/webhooks/endpoints/:id`            | admin  | xóa endpoint, **giữ lại** nhật ký giao (**204**)                            |
+| GET    | `/api/webhooks/deliveries`               | admin  | nhật ký giao, lọc `endpointId`/`status`                                      |
+| POST   | `/api/webhooks/deliveries/:id/retry`     | admin  | thử lại một lần giao đã thất bại                                            |
+| POST   | `/api/webhooks/events`                   | admin  | phát một sự kiện ra endpoint đăng ký (chống giao trùng) (**201**)            |
+| GET    | `/api/webhooks/events`                   | admin  | webhook nhận vào, kèm `processed`/`duplicate`/`late`/`rejected`             |
+| GET    | `/api/webhooks/stats`                    | admin  | thống kê nhanh                                                              |
+| POST   | `/api/webhooks/inbound`                  | Public | nhận webhook ngoài: **idempotent** theo `id`, phát hiện **kết quả đến trễ**; sai chữ ký ⇒ **401** |
+
+> Chữ ký: `sha256=<hex>` của HMAC-SHA256(raw body, secret). Biến môi trường mục 9:
+> `JOBS_SCHEDULER_ENABLED` (mặc định `true`), `REPORT_STORAGE_DIR` (mặc định `./storage/reports`),
+> `WEBHOOK_INBOUND_SECRET` (bỏ trống = không kiểm tra chữ ký, chỉ dùng khi dev).
+
 **Health** — `GET /api/health` (public).
 
 ---
@@ -399,7 +449,10 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
   ✅ đã gắn UI cho API mục 4 & 5 — màn hình **bút toán** (danh sách/chi tiết/đảo) và  
   **kỳ kế toán** (danh sách + số dư kỳ).  
   ⏳ còn lại: màn hình **sổ cái**, **báo cáo** (Recharts) — API mục 6 & 7 đã sẵn sàng, chưa gắn UI.
-- **Giai đoạn 5**: 🟡 Queue/Schedule jobs, ✅ audit log (mục 8), webhook.
+- **Giai đoạn 5**: ✅ **Queue + Schedule (mục 9)** — 4 hàng đợi BullMQ (reports/maintenance/
+  notifications/webhooks) + 4 lịch cron (chốt số dư, kiểm tra bất biến, nhắc công nợ, quét
+  webhook treo), lịch sử `job_runs` có thử lại, thông báo trong hệ thống, webhook có retry +
+  xử lý kết quả đến trễ; ✅ audit log (mục 8). ⏳ dead-letter queue, gửi email/SMS.
 - **Giai đoạn 6**: Mở rộng — Mini ERP, Payment & Reconciliation, đa tiền tệ.
 
 ---

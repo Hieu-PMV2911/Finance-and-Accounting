@@ -5,7 +5,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // `rawBody: true` giữ lại body thô cho route webhook nhận vào — cần body thô
+  // để tính lại chữ ký HMAC (JSON.stringify lại object có thể đổi thứ tự khóa).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // All routes are served under /api
   app.setGlobalPrefix('api');

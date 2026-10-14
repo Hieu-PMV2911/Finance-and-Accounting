@@ -20,11 +20,19 @@ import { AuditAction } from './enums/audit-action.enum.js';
  * - `account_balances`: bảng **dẫn xuất**, mọi thay đổi của nó đã được phản ánh
  *   qua `journal_entries`/`journal_lines` — ghi thêm chỉ làm loãng vết.
  * - `refresh_tokens`: dữ liệu phiên đăng nhập, ngoài phạm vi kiểm toán nghiệp vụ.
+ * - `job_runs`, `notifications`, `webhook_deliveries`, `webhook_events`: bảng
+ *   **vận hành** của mục 9 — thay đổi liên tục theo từng lượt chạy job và từng
+ *   lần giao webhook. Ghi vết cho chúng chỉ làm loãng nhật ký nghiệp vụ (bản
+ *   thân các bảng này đã là nhật ký, có số lần thử, lỗi và mốc thời gian).
  */
 const EXCLUDED_TABLES = new Set([
   'audit_logs',
   'account_balances',
   'refresh_tokens',
+  'job_runs',
+  'notifications',
+  'webhook_deliveries',
+  'webhook_events',
 ]);
 
 /** Trường nhạy cảm — không bao giờ được lọt vào vết kiểm toán. */

@@ -30,3 +30,6 @@ Thumbs.db
 
 # Nest
 *.tsbuildinfo
+
+# File báo cáo sinh bởi job nền (mục 9) — dữ liệu sinh ra, không commit
+storage/

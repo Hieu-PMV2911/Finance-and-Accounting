@@ -15,6 +15,7 @@ import { CommonModule } from './common/common.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
 import { FiscalPeriodsModule } from './fiscal-periods/fiscal-periods.module.js';
+import { JobsModule } from './jobs/jobs.module.js';
 import { JournalsModule } from './journals/journals.module.js';
 import { LedgerModule } from './ledger/ledger.module.js';
 import { ReportsModule } from './reports/reports.module.js';
@@ -72,6 +73,8 @@ import { UsersModule } from './users/users.module.js';
     JournalsModule,
     ReportsModule,
     AuditModule,
+    // Mục 9 — xử lý bất đồng bộ: hàng đợi BullMQ + lịch cron
+    JobsModule,
   ],
   controllers: [AppController],
   providers: [

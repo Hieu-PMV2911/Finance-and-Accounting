@@ -1,6 +1,8 @@
 import type { ComponentType } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
+  Activity,
+  Bell,
   BookMarked,
   BookOpen,
   CalendarRange,
@@ -14,6 +16,7 @@ import {
   ShieldCheck,
   UserCog,
   Users,
+  Webhook,
 } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
@@ -75,6 +78,15 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Danh mục',
     items: [{ to: '/accounts', label: 'Tài khoản kế toán', icon: BookOpen }],
+  },
+  {
+    // Mục 9 — vận hành xử lý bất đồng bộ (hàng đợi, lịch định kỳ, thông báo, webhook).
+    label: 'Vận hành',
+    items: [
+      { to: '/jobs', label: 'Xử lý bất đồng bộ', icon: Activity },
+      { to: '/notifications', label: 'Thông báo', icon: Bell },
+      { to: '/webhooks', label: 'Webhook', icon: Webhook, adminOnly: true },
+    ],
   },
   {
     label: 'Quản trị',

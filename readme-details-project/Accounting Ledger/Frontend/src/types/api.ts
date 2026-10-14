@@ -626,3 +626,327 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   journal_entries: 'Bút toán',
   journal_lines: 'Dòng định khoản',
 }
+
+// ---------------------------------------------------------------------------
+// Mục 9 — Xử lý bất đồng bộ (Queue + Schedule)
+// ---------------------------------------------------------------------------
+
+export type JobQueueName = 'reports' | 'maintenance' | 'notifications' | 'webhooks'
+
+export type JobRunStatus = 'pending' | 'active' | 'completed' | 'failed'
+
+export type JobTrigger = 'schedule' | 'api' | 'system'
+
+export type JobName =
+  | 'generate-report'
+  | 'balance-snapshot'
+  | 'integrity-check'
+  | 'send-notification'
+  | 'debt-reminder'
+  | 'deliver-webhook'
+  | 'webhook-sweep'
+
+/** Một lượt chạy job (bảng `job_runs`). */
+export interface JobRun {
+  id: string
+  queue: JobQueueName
+  jobName: JobName | string
+  status: JobRunStatus
+  trigger: JobTrigger
+  triggeredBy: string | null
+  triggeredByEmail: string | null
+  payload: Record<string, unknown> | null
+  result: Record<string, unknown> | null
+  error: string | null
+  attempts: number
+  maxAttempts: number
+  progress: number
+  startedAt: string | null
+  finishedAt: string | null
+  durationMs: number | null
+  createdAt: string
+}
+
+export interface JobRunFilters {
+  queue?: JobQueueName
+  status?: JobRunStatus
+  trigger?: JobTrigger
+  jobName?: string
+  limit?: number
+  offset?: number
+}
+
+export interface QueueCounts {
+  waiting: number
+  active: number
+  completed: number
+  failed: number
+  delayed: number
+  paused: number
+}
+
+/** Tình trạng một hàng đợi — đọc trực tiếp từ Redis ở backend. */
+export interface QueueOverview {
+  queue: JobQueueName
+  label: string
+  counts: QueueCounts
+  /** `false` khi backend không kết nối được Redis. */
+  reachable: boolean
+}
+
+export interface JobsOverview {
+  queues: QueueOverview[]
+  runs: Record<JobRunStatus, number>
+  schedulingEnabled: boolean
+}
+
+/** Một lịch định kỳ (cron) kèm lần chạy gần nhất / kế tiếp. */
+export interface ScheduleView {
+  name: string
+  label: string
+  description: string
+  cron: string
+  queue: JobQueueName
+  jobName: JobName
+  lastRunAt: string | null
+  lastStatus: JobRunStatus | null
+  nextRunAt: string | null
+}
+
+/** Một vi phạm bất biến do job kiểm tra phát hiện. */
+export interface IntegrityViolation {
+  code: string
+  severity: 'info' | 'warning' | 'critical'
+  reference: string
+  message: string
+  details: Record<string, unknown>
+}
+
+/** Phạm vi + định dạng khi xếp job sinh báo cáo nền. */
+export interface EnqueueReportPayload extends ReportScope {
+  kind?: ReportKind
+  /** Bỏ trống ⇒ job chỉ tính số liệu, không sinh file. */
+  format?: ReportFormat
+}
+
+export interface BalanceSnapshotPayload {
+  periodId?: string
+  repair?: boolean
+}
+
+export const JOB_QUEUE_LABELS: Record<JobQueueName, string> = {
+  reports: 'Sinh báo cáo',
+  maintenance: 'Bảo trì định kỳ',
+  notifications: 'Gửi thông báo',
+  webhooks: 'Webhook',
+}
+
+export const JOB_RUN_STATUSES: JobRunStatus[] = [
+  'pending',
+  'active',
+  'completed',
+  'failed',
+]
+
+export const JOB_RUN_STATUS_LABELS: Record<JobRunStatus, string> = {
+  pending: 'Đang chờ',
+  active: 'Đang chạy',
+  completed: 'Hoàn thành',
+  failed: 'Thất bại',
+}
+
+export const JOB_TRIGGER_LABELS: Record<JobTrigger, string> = {
+  schedule: 'Định kỳ',
+  api: 'Thủ công',
+  system: 'Hệ thống',
+}
+
+export const JOB_NAME_LABELS: Record<string, string> = {
+  'generate-report': 'Sinh báo cáo',
+  'balance-snapshot': 'Chốt số dư',
+  'integrity-check': 'Kiểm tra bất biến',
+  'send-notification': 'Gửi thông báo',
+  'debt-reminder': 'Nhắc công nợ',
+  'deliver-webhook': 'Giao webhook',
+  'webhook-sweep': 'Quét webhook treo',
+}
+
+// ------------------------------------------------------------ thông báo
+
+export type AppNotificationType =
+  | 'debt-reminder'
+  | 'report-ready'
+  | 'integrity-alert'
+  | 'system'
+
+export type AppNotificationSeverity = 'info' | 'warning' | 'critical'
+export type AppNotificationStatus = 'unread' | 'read'
+export type AppNotificationAudience = 'all' | 'admin' | 'targeted'
+
+/** Thông báo trong hệ thống (bảng `notifications`). */
+export interface AppNotification {
+  id: string
+  type: AppNotificationType
+  severity: AppNotificationSeverity
+  status: AppNotificationStatus
+  audience: AppNotificationAudience
+  targetUserId: string | null
+  title: string
+  body: string
+  data: Record<string, unknown> | null
+  readAt: string | null
+  readBy: string | null
+  createdAt: string
+}
+
+export interface NotificationFilters {
+  type?: AppNotificationType
+  status?: AppNotificationStatus
+  severity?: AppNotificationSeverity
+  search?: string
+  limit?: number
+  offset?: number
+}
+
+export const NOTIFICATION_TYPE_LABELS: Record<AppNotificationType, string> = {
+  'debt-reminder': 'Nhắc công nợ',
+  'report-ready': 'Báo cáo sẵn sàng',
+  'integrity-alert': 'Cảnh báo bất biến',
+  system: 'Hệ thống',
+}
+
+export const NOTIFICATION_SEVERITY_LABELS: Record<
+  AppNotificationSeverity,
+  string
+> = {
+  info: 'Thông tin',
+  warning: 'Cảnh báo',
+  critical: 'Nghiêm trọng',
+}
+
+export const NOTIFICATION_SEVERITIES: AppNotificationSeverity[] = [
+  'info',
+  'warning',
+  'critical',
+]
+
+// ------------------------------------------------------------- webhook
+
+export type WebhookEventType =
+  | 'journal.posted'
+  | 'journal.reversed'
+  | 'period.closed'
+  | 'integrity.violation'
+  | 'ping'
+
+export type WebhookDeliveryStatus = 'pending' | 'delivered' | 'failed'
+
+export type WebhookEventStatus =
+  | 'processed'
+  | 'duplicate'
+  | 'late'
+  | 'rejected'
+
+/** Endpoint nhận webhook — backend **không** trả về khóa ký. */
+export interface WebhookEndpoint {
+  id: string
+  name: string
+  url: string
+  /** Mảng rỗng = nhận mọi sự kiện. */
+  events: WebhookEventType[]
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateWebhookEndpointPayload {
+  name: string
+  url: string
+  /** Bỏ trống ⇒ backend tự sinh khóa ký HMAC-SHA256. */
+  secret?: string
+  events?: WebhookEventType[]
+  isActive?: boolean
+}
+
+export type UpdateWebhookEndpointPayload = Partial<CreateWebhookEndpointPayload>
+
+/** Một lần giao webhook ra hệ thống ngoài. */
+export interface WebhookDelivery {
+  id: string
+  endpointId: string
+  endpointName: string | null
+  endpointUrl: string | null
+  eventType: WebhookEventType
+  idempotencyKey: string
+  status: WebhookDeliveryStatus
+  attempts: number
+  maxAttempts: number
+  responseStatus: number | null
+  responseBody: string | null
+  lastError: string | null
+  nextAttemptAt: string | null
+  deliveredAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** Webhook nhận từ hệ thống ngoài (kể cả lần bị bỏ qua). */
+export interface WebhookInboundEvent {
+  id: string
+  externalId: string
+  eventType: string
+  resourceRef: string
+  occurredAt: string
+  status: WebhookEventStatus
+  reason: string | null
+  payload: Record<string, unknown> | null
+  receivedAt: string
+}
+
+export interface WebhookStats {
+  totalEndpoints: number
+  activeEndpoints: number
+  pendingDeliveries: number
+  failedDeliveries: number
+  eventsReceived: number
+  lateEvents: number
+}
+
+export interface EmitWebhookEventPayload {
+  eventType: WebhookEventType
+  resourceRef?: string
+  data?: Record<string, unknown>
+  endpointIds?: string[]
+}
+
+export const WEBHOOK_EVENT_TYPES: WebhookEventType[] = [
+  'journal.posted',
+  'journal.reversed',
+  'period.closed',
+  'integrity.violation',
+  'ping',
+]
+
+export const WEBHOOK_EVENT_LABELS: Record<WebhookEventType, string> = {
+  'journal.posted': 'Bút toán đã ghi sổ',
+  'journal.reversed': 'Bút toán đã đảo',
+  'period.closed': 'Kỳ kế toán đã chốt',
+  'integrity.violation': 'Vi phạm bất biến',
+  ping: 'Thử nghiệm',
+}
+
+export const WEBHOOK_DELIVERY_STATUS_LABELS: Record<
+  WebhookDeliveryStatus,
+  string
+> = {
+  pending: 'Đang chờ',
+  delivered: 'Đã giao',
+  failed: 'Thất bại',
+}
+
+export const WEBHOOK_EVENT_STATUS_LABELS: Record<WebhookEventStatus, string> = {
+  processed: 'Đã xử lý',
+  duplicate: 'Trùng lặp',
+  late: 'Đến trễ',
+  rejected: 'Bị từ chối',
+}
