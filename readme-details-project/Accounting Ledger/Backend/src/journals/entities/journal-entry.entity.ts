@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 
 import { JournalStatus } from '../../common/enums/journal-status.enum.js';
+import { SourceType } from '../../common/enums/source-type.enum.js';
 import { FiscalPeriod } from '../../fiscal-periods/entities/fiscal-period.entity.js';
 import type { JournalLine } from './journal-line.entity.js';
 
@@ -23,8 +24,16 @@ import type { JournalLine } from './journal-line.entity.js';
  *   tạo **bút toán đảo** (`reverse`) và giữ nguyên lịch sử.
  * - `idempotencyKey` duy nhất (khi có) — chống ghi trùng do client retry.
  * - `entryNo` chỉ được cấp khi ghi sổ, duy nhất trên toàn hệ thống.
+ * - `(sourceType, sourceId)` duy nhất khi `sourceId` khác NULL — **một chứng từ nguồn
+ *   chỉ sinh một bút toán gốc** (mục 10.0). Lá chắn thứ hai ở tầng DB cho quy tắc
+ *   mà service đã kiểm tra trước đó.
  */
 @Entity('journal_entries')
+@Index('journal_entries_source_uidx', ['sourceType', 'sourceId'], {
+  unique: true,
+  // Bút toán nhập tay (source_id NULL) không bị ràng buộc này.
+  where: '"source_id" IS NOT NULL',
+})
 export class JournalEntry {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -53,9 +62,30 @@ export class JournalEntry {
   @Column({ type: 'varchar', length: 500 })
   description: string;
 
-  /** Số chứng từ gốc (hóa đơn, phiếu thu/chi…). */
+  /** Số chứng từ gốc (hóa đơn, phiếu thu/chi…) — hiển thị, không kiểm soát trùng. */
   @Column({ type: 'varchar', length: 64, nullable: true })
   reference: string | null;
+
+  /**
+   * Loại **chứng từ nguồn** (mục 10.0). `manual` = nhập tay; mọi loại khác buộc
+   * phải có `sourceId`.
+   */
+  @Column({
+    name: 'source_type',
+    type: 'enum',
+    enum: SourceType,
+    enumName: 'source_type_enum',
+    default: SourceType.MANUAL,
+  })
+  sourceType: SourceType;
+
+  /**
+   * Id của chứng từ nguồn (hóa đơn / phiếu thu / dòng sao kê / sự kiện provider).
+   * Cùng với `sourceType` tạo thành khóa truy vết ngược từ báo cáo về chứng từ gốc.
+   */
+  @Index()
+  @Column({ name: 'source_id', type: 'uuid', nullable: true })
+  sourceId: string | null;
 
   @Index()
   @Column({

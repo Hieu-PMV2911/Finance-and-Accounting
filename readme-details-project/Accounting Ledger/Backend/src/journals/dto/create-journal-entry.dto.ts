@@ -3,13 +3,16 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
 
+import { SourceType } from '../../common/enums/source-type.enum.js';
 import { CreateJournalLineDto } from './create-journal-line.dto.js';
 
 export class CreateJournalEntryDto {
@@ -42,6 +45,25 @@ export class CreateJournalEntryDto {
   @IsString()
   @MaxLength(128, { message: 'idempotencyKey tối đa 128 ký tự' })
   idempotencyKey?: string;
+
+  @ApiPropertyOptional({
+    enum: SourceType,
+    default: SourceType.MANUAL,
+    description:
+      'Loại chứng từ nguồn (mục 10.0). Để trống = bút toán nhập tay. Mọi loại khác bắt buộc kèm sourceId.',
+  })
+  @IsOptional()
+  @IsEnum(SourceType, { message: 'sourceType không hợp lệ' })
+  sourceType?: SourceType;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Id chứng từ nguồn (hóa đơn / phiếu thu / dòng sao kê…). Một chứng từ nguồn chỉ sinh duy nhất một bút toán gốc.',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'sourceId không hợp lệ' })
+  sourceId?: string;
 
   @ApiProperty({
     type: [CreateJournalLineDto],

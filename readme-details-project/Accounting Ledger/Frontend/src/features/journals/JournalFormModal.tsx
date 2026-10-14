@@ -42,6 +42,7 @@ import type {
 } from '@/types/api'
 import { listAccounts } from '../accounts/accounts.api'
 import { listFiscalPeriods } from '../periods/periods.api'
+import { listParties } from '../parties/parties.api'
 import { createJournal, updateJournal } from './journals.api'
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -52,6 +53,7 @@ interface DraftLine {
   debit: string
   credit: string
   description: string
+  partyId: string
 }
 
 let lineKeySeed = 0
@@ -67,6 +69,7 @@ function emptyLine(): DraftLine {
     debit: '',
     credit: '',
     description: '',
+    partyId: '',
   }
 }
 
@@ -75,6 +78,10 @@ function createIdempotencyKey(): string {
   const random = globalThis.crypto?.randomUUID?.()
   if (random) return `je-${random}`
   return `je-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function isPartyAccountCode(code: string): boolean {
+  return code.startsWith('131') || code.startsWith('331')
 }
 
 interface JournalFormModalProps {
@@ -112,6 +119,7 @@ export function JournalFormModal({
           debit: toMinor(line.debit) > 0n ? line.debit : '',
           credit: toMinor(line.credit) > 0n ? line.credit : '',
           description: line.description ?? '',
+          partyId: (line as any).partyId ?? '',
         }))
       : [emptyLine(), emptyLine()],
   )
@@ -127,6 +135,12 @@ export function JournalFormModal({
     },
   })
   const postableAccounts = accountsQuery.data ?? []
+
+  const partiesQuery = useQuery({
+    queryKey: ['parties', 'active'],
+    queryFn: () => listParties({ isActive: true }),
+  })
+  const parties = partiesQuery.data ?? []
 
   // Cảnh báo sớm khi ngày hạch toán rơi ra ngoài mọi kỳ đang mở — backend sẽ
   // từ chối, nhưng hiển thị ngay ở đây thì người dùng hiểu vấn đề tức thì.
@@ -231,6 +245,7 @@ export function JournalFormModal({
         debit: hasDebit ? debit : undefined,
         credit: hasCredit ? credit : undefined,
         description: line.description.trim() || undefined,
+        partyId: line.partyId || undefined,
       })
     }
 
@@ -396,6 +411,33 @@ export function JournalFormModal({
                         ))}
                       </SelectContent>
                     </Select>
+                    {(() => {
+                      const account = postableAccounts.find(
+                        (a) => a.id === line.accountId,
+                      )
+                      if (account && isPartyAccountCode(account.code)) {
+                        return (
+                          <Select
+                            value={line.partyId}
+                            onValueChange={(value) =>
+                              updateLine(line.key, { partyId: value })
+                            }
+                          >
+                            <SelectTrigger className="mt-2 w-full">
+                              <SelectValue placeholder="Chọn đối tượng" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {parties.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.code} — {p.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )
+                      }
+                      return null
+                    })()}
                   </div>
 
                   <div className="col-span-6 sm:col-span-2">

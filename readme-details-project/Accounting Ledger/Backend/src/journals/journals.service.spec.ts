@@ -60,11 +60,13 @@ function balancedLines() {
 }
 
 function matches(
-  entity: Record<string, unknown>,
+  entity: unknown,
   where: Record<string, unknown>,
 ): boolean {
+  if (!entity || typeof entity !== 'object') return false;
+  const obj = entity as Record<string, unknown>;
   return Object.entries(where).every(([key, condition]) => {
-    const actual = entity[key];
+    const actual = obj[key];
     if (condition instanceof FindOperator) {
       throw new Error(`Mock chưa hỗ trợ FindOperator "${condition.type}"`);
     }
@@ -206,6 +208,10 @@ function buildService(store: Store = createStore()) {
 
   const ledger = { applyMovements: vi.fn(async () => undefined) };
 
+  const parties = {
+    getActive: vi.fn(async (id: string) => ({ id, code: 'C001', name: 'Test', isActive: true })),
+  };
+
   const dataSource = {
     transaction: vi.fn(async (run: (m: unknown) => Promise<unknown>) => run(manager)),
   };
@@ -216,6 +222,7 @@ function buildService(store: Store = createStore()) {
     accounts as never,
     periods as never,
     ledger as never,
+    parties as never,
     dataSource as never,
   );
 

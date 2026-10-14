@@ -21,11 +21,13 @@ import { WebhooksController } from './webhooks.controller.js';
  * Đường dẫn ở đây **chưa có tiền tố `/api`** (tiền tố do `app.setGlobalPrefix`
  * trong `main.ts` gắn vào lúc chạy).
  */
-function routeTable(controller: object): string[] {
-  const base = (Reflect.getMetadata(PATH_METADATA, controller) as string) ?? '';
-  const prototype = controller.prototype as Record<string, unknown>;
+function routeTable(controller: unknown): string[] {
+  const base = (Reflect.getMetadata(PATH_METADATA, controller as object) as string) ?? '';
+  const ctor = controller as { prototype?: Record<string, unknown> };
+  const prototype = ctor.prototype as Record<string, unknown> | undefined;
 
   const routes: string[] = [];
+  if (!prototype) return routes;
   for (const name of Object.getOwnPropertyNames(prototype)) {
     if (name === 'constructor') continue;
     const handler = prototype[name];
@@ -47,10 +49,12 @@ function routeTable(controller: object): string[] {
 }
 
 function handlerRoles(
-  controller: object,
+  controller: unknown,
   method: string,
 ): readonly Role[] | undefined {
-  const prototype = controller.prototype as Record<string, unknown>;
+  const ctor = controller as { prototype?: Record<string, unknown> };
+  const prototype = ctor.prototype as Record<string, unknown> | undefined;
+  if (!prototype) return undefined;
   return Reflect.getMetadata(ROLES_KEY, prototype[method] as object) as
     | readonly Role[]
     | undefined;
@@ -128,12 +132,16 @@ describe('Mục 9 — bề mặt API', () => {
       Role.ADMIN,
     ]);
 
-    const prototype = WebhooksController.prototype as Record<string, unknown>;
-    expect(Reflect.getMetadata(IS_PUBLIC_KEY, prototype.inbound as object)).toBe(
-      true,
-    );
-    expect(
-      Reflect.getMetadata(IS_PUBLIC_KEY, prototype.listEndpoints as object),
-    ).toBeUndefined();
+    const wCtor = WebhooksController as unknown as { prototype?: Record<string, unknown> };
+    const prototype = wCtor.prototype as Record<string, unknown> | undefined;
+    expect(prototype).toBeDefined();
+    if (prototype) {
+      expect(Reflect.getMetadata(IS_PUBLIC_KEY, prototype.inbound as object)).toBe(
+        true,
+      );
+      expect(
+        Reflect.getMetadata(IS_PUBLIC_KEY, prototype.listEndpoints as object),
+      ).toBeUndefined();
+    }
   });
 });

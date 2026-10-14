@@ -8,13 +8,11 @@ import {
 } from 'typeorm';
 
 import { Account } from '../../accounts/entities/account.entity.js';
+import { Party } from '../../parties/entities/party.entity.js';
 import { JournalEntry } from './journal-entry.entity.js';
 
 /**
- * Một dòng định khoản (Nợ **hoặc** Có) của bút toán.
- *
- * Mỗi dòng chỉ được ghi vào một bên: `debit > 0` XOR `credit > 0`.
- * Chỉ được trỏ tới tài khoản lá đang hoạt động (`isPostable = true`).
+ * Một dòng định khoản (Nợ hoặc Có) của bút toán.
  */
 @Entity('journal_lines')
 export class JournalLine {
@@ -32,7 +30,6 @@ export class JournalLine {
   @JoinColumn({ name: 'entry_id' })
   entry: JournalEntry;
 
-  /** Thứ tự dòng trong bút toán (bắt đầu từ 1). */
   @Column({ name: 'line_no', type: 'int' })
   lineNo: number;
 
@@ -43,6 +40,14 @@ export class JournalLine {
   @ManyToOne(() => Account, { nullable: false, onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'account_id' })
   account: Account;
+
+  @Index()
+  @Column({ name: 'party_id', type: 'uuid', nullable: true })
+  partyId: string | null;
+
+  @ManyToOne(() => Party, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'party_id' })
+  party: Party | null;
 
   @Column({ type: 'numeric', precision: 19, scale: 4, default: 0 })
   debit: string;

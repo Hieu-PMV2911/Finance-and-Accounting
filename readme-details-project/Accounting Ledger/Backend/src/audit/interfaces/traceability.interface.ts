@@ -1,4 +1,12 @@
+import type { SourceType } from '../../common/enums/source-type.enum.js';
 import type { AuditLog } from '../entities/audit-log.entity.js';
+
+/** Chứng từ nguồn có cấu trúc (mục 10.0). */
+export interface JournalSource {
+  type: SourceType;
+  /** Id chứng từ nguồn — mở ra được hóa đơn / phiếu thu / dòng sao kê tương ứng. */
+  id: string;
+}
 
 /** Một dòng định khoản trong kết quả truy vết. */
 export interface TraceJournalLine {
@@ -39,8 +47,13 @@ export interface JournalTraceability {
     reversedByEntryId: string | null;
   };
   lines: TraceJournalLine[];
-  /** Chứng từ nguồn (số hóa đơn / phiếu thu-chi) để truy ngược ra giấy tờ gốc. */
+  /** Số chứng từ nguồn (hóa đơn / phiếu thu-chi) — chuỗi hiển thị cho người dùng. */
   sourceDocument: string | null;
+  /**
+   * Chứng từ nguồn **có cấu trúc** (mục 10.0): `null` với bút toán nhập tay, ngược
+   * lại là `{ type, id }` để mở thẳng chứng từ gốc.
+   */
+  source: JournalSource | null;
   /** Vết kiểm toán của bút toán này, mới nhất trước. */
   history: AuditLog[];
 }

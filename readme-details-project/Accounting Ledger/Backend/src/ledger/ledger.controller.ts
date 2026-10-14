@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swa
 
 import { QueryGeneralLedgerDto } from './dto/query-general-ledger.dto.js';
 import { QueryReconciliationDto } from './dto/query-reconciliation.dto.js';
+import { QuerySubLedgerDto } from './dto/query-sub-ledger.dto.js';
 import { QueryTrialBalanceDto } from './dto/query-trial-balance.dto.js';
 import { LedgerQueryService } from './ledger-query.service.js';
 
@@ -22,6 +23,19 @@ export class LedgerController {
   @ApiOkResponse({ description: 'Sổ cái chi tiết của tài khoản' })
   generalLedger(@Query() query: QueryGeneralLedgerDto) {
     return this.ledgerQuery.generalLedger(query);
+  }
+
+  @Get('sub-ledger')
+  @ApiOperation({
+    summary: 'Sổ cái phụ theo đối tượng (mục 10.0)',
+    description:
+      'Công nợ của MỘT khách hàng / nhà cung cấp: số dư đầu kỳ → từng phát sinh ' +
+      '(kèm số dư lũy kế) → số dư cuối kỳ. Bắt buộc partyId; phạm vi theo periodId ' +
+      'hoặc fromDate + toDate; có thể giới hạn thêm một tài khoản công nợ.',
+  })
+  @ApiOkResponse({ description: 'Sổ cái phụ của đối tượng' })
+  subLedger(@Query() query: QuerySubLedgerDto) {
+    return this.ledgerQuery.subLedger(query);
   }
 
   @Get('trial-balance')

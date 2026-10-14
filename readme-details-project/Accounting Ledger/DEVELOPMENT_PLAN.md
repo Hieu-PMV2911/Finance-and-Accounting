@@ -311,12 +311,42 @@ pnpm build                    # build production
 
 ---
 
-## 12. Định hướng mở rộng (từ `Future-project.txt`)
+## 12. Định hướng mở rộng (mục 10 — chi tiết ở `EXTENSION_PLAN.md`)
 
-- **Dự án 2 — Payment & Reconciliation (6–8 tuần):** vòng đời thanh toán, idempotency, webhook giả lập, retry, xử lý kết quả đến trễ, đối soát sao kê ngân hàng, danh sách giao dịch lệch.
-- **Dự án 3 — Mini ERP (6–10 tuần):** Customer/Vendor, Sales Invoice, Vendor Bill, công nợ, thanh toán một phần, phân quyền/phê duyệt, truy vết từ báo cáo → bút toán → chứng từ nguồn.
+Bám `Future-project.txt`: **Dự án 2 — Payment & Reconciliation** và **Dự án 3 — Mini ERP**, cộng thêm
+đa tiền tệ / đa công ty / thuế. Kế hoạch đầy đủ (mô hình dữ liệu, bất biến, API, job, test, nghiệm thu)
+nằm ở **`EXTENSION_PLAN.md`** — đây là bản tóm tắt.
 
-> Hai dự án này dùng chung lõi Accounting Ledger: tận dụng `journals`, `accounts`, `account_balances` làm nền.
+### 12.1 Bốn chiều thông tin còn thiếu (làm trước tính năng)
+
+| Chiều | Hiện tại | Bổ sung |
+|---|---|---|
+| Đối tượng | công nợ chỉ theo tài khoản 131*/331* | bảng `parties` + `journal_lines.party_id` (sổ cái phụ) |
+| Chứng từ nguồn | `reference` (chuỗi tự do) | `journal_entries.source_type/source_id` + `UNIQUE(source_type, source_id)` |
+| Phân bổ | không có | bảng `allocations` (phân bổ thanh toán vào hóa đơn) |
+| Tiền tệ & đơn vị | một loại tiền | `currency`/`fx_amount`/`fx_rate` trên dòng; `companies.company_id` |
+
+### 12.2 Lộ trình
+
+- **10.0 — Nền chung (2 tuần):** party, chứng từ nguồn có cấu trúc, phân bổ, sổ cái phụ theo đối tượng,
+  mở rộng truy vết (`JournalTraceability.source`).
+- **10.A — Mini ERP (6–8 tuần):** Customer/Vendor, Sales Invoice, Vendor Bill, phiếu thu/chi, công nợ +
+  tuổi nợ, thanh toán một phần, báo cáo công nợ/doanh thu theo khách; nâng cấp `debt-reminder`.
+- **10.B — Payment & Reconciliation (6–8 tuần):** vòng đời thanh toán có nhánh `unknown` (timeout ≠ thất bại),
+  provider mô phỏng, idempotency, webhook + kết quả đến trễ, sao kê ngân hàng, khớp 3 tầng, danh sách lệch,
+  dead-letter queue.
+- **10.C — Nâng cao (4–6 tuần):** đa tiền tệ (tỷ giá nhập tay + chênh lệch tỷ giá) → thuế GTGT → đa công ty
+  (migration riêng, cách ly theo `company_id`).
+
+> Thứ tự thực thi **đảo** so với tài liệu gốc (10.A trước 10.B): đối soát chỉ có nghĩa khi đã có giao dịch
+> nội bộ (hóa đơn, phiếu thu/chi, công nợ) để đối chiếu. Xem lý do ở `EXTENSION_PLAN.md` mục 5.
+
+### 12.3 Nguyên tắc
+
+Cả hai dự án **dùng chung lõi**: mọi chứng từ ghi sổ qua `JournalsService` trong **cùng transaction**
+(không có bộ máy ghi sổ thứ hai); một chứng từ nguồn ⇒ **đúng một** bút toán gốc; sửa sai bằng chứng từ
+điều chỉnh; **timeout không đồng nghĩa thất bại**; sổ cái luôn ở **đồng tiền hạch toán** nên báo cáo và
+bất biến Σ Nợ = Σ Có hiện có không phải sửa.
 
 ---
 

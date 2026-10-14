@@ -17,6 +17,7 @@ import {
   UserCog,
   Users,
   Webhook,
+  Building2,
 } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
@@ -77,7 +78,10 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'Danh mục',
-    items: [{ to: '/accounts', label: 'Tài khoản kế toán', icon: BookOpen }],
+    items: [
+      { to: '/accounts', label: 'Tài khoản kế toán', icon: BookOpen },
+      { to: '/parties', label: 'Đối tượng (Khách/NCC)', icon: Building2 },
+    ],
   },
   {
     // Mục 9 — vận hành xử lý bất đồng bộ (hàng đợi, lịch định kỳ, thông báo, webhook).

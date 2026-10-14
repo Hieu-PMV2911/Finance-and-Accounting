@@ -117,10 +117,26 @@
 - ⏳ Còn lại: dead-letter queue riêng cho job thất bại vĩnh viễn, gửi email/SMS,
   Bull Board/UI giám sát chuyên sâu, và định kỳ dọn file báo cáo cũ.
 
-## 10. Mở rộng (dài hạn)
-- **Mini ERP:** Customer/Vendor, Sales Invoice, Vendor Bill, công nợ, thanh toán một phần.
-- **Payment & Reconciliation:** vòng đời thanh toán, đối soát sao kê ngân hàng, danh sách giao dịch lệch.
-- Đa tiền tệ, đa công ty, tích hợp thuế.
+## 10. Mở rộng (dài hạn) — ⏳ kế hoạch chi tiết ở `../EXTENSION_PLAN.md`
+
+Biến lõi sổ cái (mục 1–9) thành quy trình chứng từ: **Mini ERP** + **Payment & Reconciliation**,
+rồi lên **đa tiền tệ · đa công ty · thuế**. Bốn chiều thông tin còn thiếu phải bổ sung **trước**
+khi làm tính năng (xem `EXTENSION_PLAN.md` mục 3): **đối tượng (party)**, **chứng từ nguồn có cấu
+trúc (source_type/source_id)**, **phân bổ thanh toán (allocations)**, **tiền tệ & đơn vị**.
+
+| Giai đoạn | Nội dung | Ước lượng |
+|---|---|---|
+| **10.0 — Nền chung** | `parties` + `journal_lines.party_id` (sổ cái phụ theo đối tượng) · `journal_entries.source_type/source_id` + `UNIQUE(source_type, source_id)` · `allocations` · mở rộng truy vết | 2 tuần |
+| **10.A — Mini ERP** | Customer/Vendor, Sales Invoice, Vendor Bill, Phiếu thu/chi, **công nợ + tuổi nợ**, thanh toán một phần, báo cáo công nợ/doanh thu; nâng cấp `debt-reminder` theo đối tượng + tuổi nợ | 6–8 tuần |
+| **10.B — Payment & Reconciliation** | Vòng đời thanh toán (`initiated → authorized → captured → settled`, nhánh `unknown` cho timeout), idempotency, webhook + kết quả đến trễ, sao kê ngân hàng, khớp 3 tầng, **danh sách giao dịch lệch**, dead-letter queue | 6–8 tuần |
+| **10.C — Nâng cao** | Đa tiền tệ (bảng `exchange_rates` nhập tay + chênh lệch tỷ giá) → thuế GTGT (`tax_codes`) → **đa công ty** (migration riêng) | 4–6 tuần |
+
+**Nguyên tắc bất di bất dịch:** mọi chứng từ của mục 10 ghi sổ **qua `JournalsService`** trong cùng
+transaction (không có bộ máy ghi sổ thứ hai); một chứng từ nguồn chỉ sinh **một** bút toán gốc; sửa
+sai bằng chứng từ điều chỉnh; **timeout không đồng nghĩa thất bại**; sổ cái luôn ở đồng tiền hạch toán.
+
+**Nghiệm thu mục 10:** truy ngược **báo cáo → chứng từ nguồn → bút toán → vết kiểm toán** chạy một
+mạch qua API, và kịch bản timeout/retry/kết quả đến trễ chạy end-to-end **mà không tạo giao dịch trùng**.
 
 ---
 *Ghi chú: tiền lưu bằng `NUMERIC(19,4)` + `decimal.js` — tuyệt đối không dùng float.*

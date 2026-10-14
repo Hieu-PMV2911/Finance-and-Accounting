@@ -226,12 +226,23 @@ export const FISCAL_PERIOD_STATUS_LABELS: Record<FiscalPeriodStatus, string> = {
 
 export type JournalStatus = 'draft' | 'approved' | 'posted' | 'reversed'
 
+export type SourceType =
+  | 'manual'
+  | 'sales_invoice'
+  | 'vendor_bill'
+  | 'payment'
+  | 'bank_transaction'
+  | 'provider_event'
+
 export interface JournalLine {
   id: string
   entryId: string
   lineNo: number
   accountId: string
   account?: Account
+  /** Đối tượng của sổ cái phụ (chỉ dùng với tài khoản công nợ 131/331). */
+  partyId: string | null
+  party?: Party
   debit: string
   credit: string
   description: string | null
@@ -247,6 +258,8 @@ export interface JournalEntry {
   period?: FiscalPeriod
   description: string
   reference: string | null
+  sourceType: SourceType
+  sourceId: string | null
   status: JournalStatus
   totalDebit: string
   totalCredit: string
@@ -270,12 +283,15 @@ export interface CreateJournalLinePayload {
   debit?: string
   credit?: string
   description?: string
+  partyId?: string | null
 }
 
 export interface CreateJournalEntryPayload {
   date: string
   description: string
   reference?: string
+  sourceType?: SourceType
+  sourceId?: string
   /** Gửi lại cùng khóa sẽ trả về bút toán đã tạo thay vì tạo trùng. */
   idempotencyKey?: string
   lines: CreateJournalLinePayload[]
@@ -582,6 +598,11 @@ export interface TraceJournalLine {
 }
 
 /** Truy vết một bút toán: báo cáo → bút toán → chứng từ nguồn. */
+export interface JournalSource {
+  type: SourceType
+  id: string
+}
+
 export interface JournalTraceability {
   entity: 'journal_entries'
   entityId: string
@@ -606,6 +627,8 @@ export interface JournalTraceability {
   lines: TraceJournalLine[]
   /** Số chứng từ nguồn (hóa đơn / phiếu thu-chi) để truy ngược ra giấy tờ gốc. */
   sourceDocument: string | null
+  /** Chứng từ nguồn có cấu trúc. */
+  source: JournalSource | null
   /** Vết kiểm toán của bút toán này, mới nhất trước. */
   history: AuditLog[]
 }
@@ -829,6 +852,110 @@ export const NOTIFICATION_SEVERITIES: AppNotificationSeverity[] = [
   'warning',
   'critical',
 ]
+
+// -------------------------------------------------------------
+// Mục 10.0 — Đối tượng (parties) & sổ cái phụ
+// -------------------------------------------------------------
+
+export type PartyType = 'customer' | 'vendor' | 'both'
+
+export interface Party {
+  id: string
+  code: string
+  type: PartyType
+  name: string
+  taxCode: string | null
+  address: string | null
+  contactName: string | null
+  contactPhone: string | null
+  contactEmail: string | null
+  paymentTermDays: number
+  creditLimit: string | null
+  isActive: boolean
+  description: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PartyFilters {
+  type?: PartyType
+  isActive?: boolean
+  search?: string
+}
+
+export interface CreatePartyPayload {
+  code: string
+  type: PartyType
+  name: string
+  taxCode?: string
+  address?: string
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  paymentTermDays?: number
+  creditLimit?: string
+  isActive?: boolean
+  description?: string
+}
+
+export type UpdatePartyPayload = Partial<CreatePartyPayload>
+
+export interface PartyUsage {
+  partyId: string
+  journalLines: number
+  deletable: boolean
+}
+
+export interface SubLedgerLine {
+  journalEntryId: string
+  entryNo: string | null
+  date: string
+  description: string
+  reference: string | null
+  accountId: string
+  accountCode: string
+  accountName: string
+  lineDescription: string | null
+  debit: string
+  credit: string
+  balanceDebit: string
+  balanceCredit: string
+}
+
+export interface SubLedger {
+  partyId: string
+  partyCode: string
+  partyName: string
+  partyType: PartyType
+  fromDate: string
+  toDate: string
+  periodId: string | null
+  periodCode: string | null
+  accountCodes: string[]
+  openingDebit: string
+  openingCredit: string
+  lines: SubLedgerLine[]
+  totalDebit: string
+  totalCredit: string
+  closingDebit: string
+  closingCredit: string
+  netClosing: string
+}
+
+export interface SubLedgerQuery extends ReportScope {
+  partyId: string
+  accountId?: string
+  limit?: number
+  offset?: number
+}
+
+export const PARTY_TYPES: PartyType[] = ['customer', 'vendor', 'both']
+
+export const PARTY_TYPE_LABELS: Record<PartyType, string> = {
+  customer: 'Khách hàng',
+  vendor: 'Nhà cung cấp',
+  both: 'Khách hàng & Nhà cung cấp',
+}
 
 // ------------------------------------------------------------- webhook
 

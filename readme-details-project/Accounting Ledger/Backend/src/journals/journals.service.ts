@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,6 +17,14 @@ import {
   JournalStatus,
 } from '../common/enums/journal-status.enum.js';
 import {
+  requiresSourceId,
+  SourceType,
+} from '../common/enums/source-type.enum.js';
+import {
+  isPartyAccount,
+  partyAccountMessage,
+} from '../common/utils/party-account.util.js';
+import {
   exceedsMoneyRange,
   moneyToString,
   sumMoney,
@@ -25,6 +34,7 @@ import type { FiscalPeriod } from '../fiscal-periods/entities/fiscal-period.enti
 import { FiscalPeriodsService } from '../fiscal-periods/fiscal-periods.service.js';
 import { LedgerService } from '../ledger/ledger.service.js';
 import type { LedgerMovement } from '../ledger/interfaces/account-balance-view.interface.js';
+import { PartiesService } from '../parties/parties.service.js';
 import type { CreateJournalEntryDto } from './dto/create-journal-entry.dto.js';
 import type { CreateJournalLineDto } from './dto/create-journal-line.dto.js';
 import type { QueryJournalsDto } from './dto/query-journals.dto.js';
@@ -40,6 +50,8 @@ interface NormalizedLine {
   debit: string;
   credit: string;
   description: string | null;
+  /** Đối tượng của sổ cái phụ (mục 10.0) — chỉ có ở dòng tài khoản công nợ. */
+  partyId: string | null;
 }
 
 interface NormalizedEntry {
@@ -72,6 +84,7 @@ export class JournalsService {
     private readonly accounts: AccountsService,
     private readonly periods: FiscalPeriodsService,
     private readonly ledger: LedgerService,
+    private readonly parties: PartiesService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -158,6 +171,14 @@ export class JournalsService {
     // Bất biến số 3: kỳ đã khóa/chốt thì không nhận bút toán nào, kể cả bản nháp.
     this.periods.assertAcceptsPostings(period);
 
+    // Mục 10.0: chứng từ nguồn phải được khai báo rõ và chỉ sinh MỘT bút toán gốc.
+    const sourceType = dto.sourceType ?? SourceType.MANUAL;
+    const sourceId = dto.sourceId?.trim() || null;
+    this.assertSourcePair(sourceType, sourceId);
+    if (sourceId) {
+      await this.assertSourceUnused(sourceType, sourceId);
+    }
+
     const normalized = await this.normalizeLines(dto.lines);
 
     const entry = this.entries.create({
@@ -166,6 +187,8 @@ export class JournalsService {
       periodId: period.id,
       description: dto.description.trim(),
       reference: dto.reference?.trim() || null,
+      sourceType,
+      sourceId,
       status: JournalStatus.DRAFT,
       totalDebit: normalized.totalDebit,
       totalCredit: normalized.totalCredit,
@@ -175,6 +198,7 @@ export class JournalsService {
         this.lines.create({
           lineNo: line.lineNo,
           accountId: line.accountId,
+          partyId: line.partyId,
           debit: line.debit,
           credit: line.credit,
           description: line.description,
@@ -190,6 +214,18 @@ export class JournalsService {
         const existing = await this.findByIdempotencyKey(idempotencyKey);
         if (existing) {
           return existing;
+        }
+      }
+      // Hai request đồng thời cùng chứng từ nguồn: unique index chặn bản thứ hai.
+      if (sourceId) {
+        const existing = await this.entries.findOne({
+          where: { sourceType, sourceId },
+        });
+        if (existing) {
+          throw new ConflictException(
+            `Chứng từ nguồn (${sourceType}, ${sourceId}) đã được ghi nhận ở bút toán ` +
+              `${existing.entryNo ?? '(còn nháp)'} — không thể tạo bút toán thứ hai`,
+          );
         }
       }
       throw error;
@@ -227,6 +263,7 @@ export class JournalsService {
           entryId: entry.id,
           lineNo: line.lineNo,
           accountId: line.accountId,
+          partyId: line.partyId,
           debit: line.debit,
           credit: line.credit,
           description: line.description,
@@ -357,6 +394,11 @@ export class JournalsService {
           ? `Đảo bút toán ${original.entryNo} — ${reason}`
           : `Đảo bút toán — ${reason}`,
         reference: original.reference,
+        // Bút toán đảo là **chứng từ điều chỉnh**, không phải chứng từ nguồn mới: nếu
+        // sao chép `sourceId` sẽ vi phạm ràng buộc "một nguồn = một bút toán" và phá
+        // truy vết. Quan hệ với bản gốc đã có `reversalOfEntryId`.
+        sourceType: SourceType.MANUAL,
+        sourceId: null,
         status: JournalStatus.DRAFT,
         totalDebit: moneyToString(original.totalDebit),
         totalCredit: moneyToString(original.totalCredit),
@@ -367,6 +409,7 @@ export class JournalsService {
           manager.create(JournalLine, {
             lineNo: index + 1,
             accountId: line.accountId,
+            partyId: line.partyId,
             // Hoán đổi Nợ ↔ Có.
             debit: moneyToString(line.credit),
             credit: moneyToString(line.debit),
@@ -430,6 +473,47 @@ export class JournalsService {
       where: { idempotencyKey: key },
       relations: { lines: true },
     });
+  }
+
+  /**
+   * Mục 10.0: `sourceType` khác `manual` ⇒ **bắt buộc** có `sourceId`; ngược lại
+   * `manual` không được kèm `sourceId` (tránh hai nguồn cùng trỏ một chứng từ).
+   */
+  private assertSourcePair(
+    sourceType: SourceType,
+    sourceId: string | null,
+  ): void {
+    if (requiresSourceId(sourceType) && !sourceId) {
+      throw new BadRequestException(
+        `sourceType "${sourceType}" phải đi kèm sourceId (chứng từ nguồn)`,
+      );
+    }
+    if (!requiresSourceId(sourceType) && sourceId) {
+      throw new BadRequestException(
+        'sourceId chỉ dùng khi sourceType khác "manual"',
+      );
+    }
+  }
+
+  /**
+   * Một chứng từ nguồn chỉ sinh **một** bút toán gốc (mục 10.0).
+   *
+   * Kiểm tra trước để trả lỗi rõ ràng; unique index `journal_entries_source_uidx`
+   * ở DB vẫn là lá chắn cuối cho trường hợp hai request chạy song song.
+   */
+  private async assertSourceUnused(
+    sourceType: SourceType,
+    sourceId: string,
+  ): Promise<void> {
+    const existing = await this.entries.findOne({
+      where: { sourceType, sourceId },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Chứng từ nguồn (${sourceType}, ${sourceId}) đã được ghi nhận ở bút toán ` +
+          `${existing.entryNo ?? '(còn nháp)'} — không thể tạo bút toán thứ hai`,
+      );
+    }
   }
 
   private assertDraft(entry: JournalEntry, action: string): void {
@@ -511,9 +595,21 @@ export class JournalsService {
       // Chỉ tài khoản lá đang hoạt động mới được ghi sổ.
       const account = await this.accounts.getPostable(dto.accountId);
 
+      // Mục 10.0 — sổ cái phụ: đối tượng chỉ gắn được vào dòng tài khoản công nợ.
+      let partyId: string | null = null;
+      if (dto.partyId) {
+        if (!isPartyAccount(account.code)) {
+          throw new BadRequestException(
+            `Dòng ${position}: ${partyAccountMessage(account.code)}`,
+          );
+        }
+        partyId = (await this.parties.resolveActive(dto.partyId)).id;
+      }
+
       lines.push({
         lineNo: position,
         accountId: account.id,
+        partyId,
         debit: moneyToString(debit),
         credit: moneyToString(credit),
         description: dto.description?.trim() || null,

@@ -33,11 +33,13 @@ function makePeriod(partial: Partial<FiscalPeriod>): FiscalPeriod {
 
 /** So khớp `where` có chứa FindOperator của TypeORM (LessThanOrEqual, Not…). */
 function matches(
-  entity: Record<string, unknown>,
+  entity: unknown,
   where: Record<string, unknown>,
 ): boolean {
+  if (!entity || typeof entity !== 'object') return false;
+  const obj = entity as Record<string, unknown>;
   return Object.entries(where).every(([key, condition]) => {
-    const actual = entity[key];
+    const actual = obj[key];
     if (condition instanceof FindOperator) {
       switch (condition.type) {
         case 'lessThanOrEqual':

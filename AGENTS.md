@@ -12,6 +12,7 @@
    mới nhất, rồi `MEMORY.md` (nếu có). Đây là nhật ký các session trước.
 2. **Đọc tài liệu dự án** khi cần ngữ cảnh:
    - `readme-details-project/Accounting Ledger/DEVELOPMENT_PLAN.md` — roadmap, ERD, invariants.
+   - `readme-details-project/Accounting Ledger/EXTENSION_PLAN.md` — **mục 10** (Mini ERP, Payment & Reconciliation, đa tiền tệ/đa công ty/thuế).
    - `readme-details-project/Accounting Ledger/Backend/FUTURE_FEATURES.md` — module sẽ làm.
    - `readme-details-project/*/Future-project.txt` và `Details-develop.txt`, `Stack-tecnical.txt`.
 3. **Xác nhận trạng thái môi trường** (mục 4) trước khi chạy lệnh liên quan DB/Redis.
@@ -43,6 +44,7 @@ D:\TC_KT\
     ├── Mini ERP\, Payment & Reconciliation\   (Future-project.txt)
     └── Accounting Ledger\
         ├── DEVELOPMENT_PLAN.md    ← kế hoạch phát triển đầy đủ
+        ├── EXTENSION_PLAN.md      ← kế hoạch mục 10 (Mini ERP, Payment & Reconciliation, đa tiền tệ)
         ├── docker-compose.yml     ← postgres:16 + redis:7 (nếu dùng Docker)
         ├── package.json           ← script uỷ quyền: dev / dev:fe / dev:be / build / lint / test
         ├── Frontend\              ← Vite 8 + React 19 + TS + Tailwind v4 + shadcn/ui (SPA)
@@ -365,7 +367,7 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 | GET    | `/api/reports/profit-and-loss` | đã đăng nhập | `periodId` hoặc `fromDate`+`toDate`; doanh thu/chi phí/lợi nhuận thuần + biên LN                                   |
 | GET    | `/api/reports/balance-sheet`   | đã đăng nhập | `toDate` = ngày lập báo cáo; TS = NPT + VCSH + LN giữ lại, cờ `balanced`                                           |
 | GET    | `/api/reports/cash-flow`       | đã đăng nhập | phương pháp trực tiếp; 3 nhóm HĐKD/HĐĐT/HĐTC                                                                       |
-| GET    | `/api/reports/export/:kind`    | đã đăng nhập | `kind` = `profit-and-loss` | `balance-sheet` | `cash-flow`; `format` = `xlsx` | `pdf`; trả file (`StreamableFile`) |
+| GET    | `/api/reports/export/:kind`    | đã đăng nhập | `kind` ∈ {`profit-and-loss`, `balance-sheet`, `cash-flow`}; `format` ∈ {`xlsx`, `pdf`}; trả file (`StreamableFile`) |
 
 **Audit** (`/api/audit-logs`, mục 8 — chỉ **admin**):
 
@@ -453,7 +455,13 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
   notifications/webhooks) + 4 lịch cron (chốt số dư, kiểm tra bất biến, nhắc công nợ, quét
   webhook treo), lịch sử `job_runs` có thử lại, thông báo trong hệ thống, webhook có retry +
   xử lý kết quả đến trễ; ✅ audit log (mục 8). ⏳ dead-letter queue, gửi email/SMS.
-- **Giai đoạn 6**: Mở rộng — Mini ERP, Payment & Reconciliation, đa tiền tệ.
+- **Giai đoạn 6 (mục 10 — ⏳ chưa làm)**: Mở rộng — **kế hoạch chi tiết ở `EXTENSION_PLAN.md`**.
+  Thứ tự: **10.0** nền chung (party, chứng từ nguồn có cấu trúc `source_type/source_id`, phân bổ,
+  sổ cái phụ theo đối tượng) → **10.A** Mini ERP (hóa đơn, công nợ + tuổi nợ, thanh toán một phần) →
+  **10.B** Payment & Reconciliation (vòng đời thanh toán + timeout ≠ thất bại, sao kê, danh sách lệch) →
+  **10.C** đa tiền tệ, thuế, đa công ty. Mọi chứng từ mục 10 ghi sổ **qua `JournalsService`**
+  (không có bộ máy ghi sổ thứ hai) và **một chứng từ nguồn chỉ sinh một bút toán gốc**.
+  Bề mặt API của mục 10 (dự kiến) ở `EXTENSION_PLAN.md` mục 6 — **chưa** đưa vào bảng mục 8 cho tới khi code xong.
 
 ---
 

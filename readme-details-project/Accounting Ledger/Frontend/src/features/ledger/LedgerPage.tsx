@@ -11,6 +11,7 @@ import type { FiscalPeriod, ReportScope } from '@/types/api'
 import { listFiscalPeriods } from '../periods/periods.api'
 import { GeneralLedgerPanel } from './GeneralLedgerPanel'
 import { ReconciliationPanel } from './ReconciliationPanel'
+import { SubLedgerPanel } from './SubLedgerPanel'
 import { TrialBalancePanel } from './TrialBalancePanel'
 
 /**
@@ -61,12 +62,21 @@ function LedgerTabs({ periods }: { periods: FiscalPeriod[] }) {
     <Tabs defaultValue="gl" className="gap-4">
       <TabsList className="w-fit">
         <TabsTrigger value="gl">Sổ cái chi tiết</TabsTrigger>
+        <TabsTrigger value="sub">Sổ cái phụ</TabsTrigger>
         <TabsTrigger value="tb">Bảng cân đối số phát sinh</TabsTrigger>
         <TabsTrigger value="rec">Đối chiếu số dư</TabsTrigger>
       </TabsList>
 
       <TabsContent value="gl">
         <GeneralLedgerPanel
+          periods={periods}
+          scope={scope}
+          onScopeChange={setScope}
+        />
+      </TabsContent>
+
+      <TabsContent value="sub">
+        <SubLedgerPanel
           periods={periods}
           scope={scope}
           onScopeChange={setScope}

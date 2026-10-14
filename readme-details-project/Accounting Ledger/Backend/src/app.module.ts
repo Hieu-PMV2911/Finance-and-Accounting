@@ -11,13 +11,17 @@ import { AppService } from './app.service.js';
 import { AuditContextInterceptor } from './audit/audit-context.interceptor.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { VendorBillsModule } from './bills/vendor-bills.module.js';
 import { CommonModule } from './common/common.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
 import { FiscalPeriodsModule } from './fiscal-periods/fiscal-periods.module.js';
+import { AllocationsModule } from './allocations/allocations.module.js';
+import { SalesInvoicesModule } from './invoices/sales-invoices.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { JournalsModule } from './journals/journals.module.js';
 import { LedgerModule } from './ledger/ledger.module.js';
+import { PartiesModule } from './parties/parties.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -68,6 +72,11 @@ import { UsersModule } from './users/users.module.js';
     AuthModule,
     UsersModule,
     AccountsModule,
+    // Mục 10.0 — đối tượng (khách hàng / nhà cung cấp) cho sổ cái phụ.    PartiesModule,
+    SalesInvoicesModule,
+    VendorBillsModule,
+    // Mục 10.0 — phân bổ thanh toán giữa chứng từ đích và nguồn.
+    AllocationsModule,
     LedgerModule,
     FiscalPeriodsModule,
     JournalsModule,

@@ -129,6 +129,10 @@ export class AuditService {
         description: line.description,
       })),
       sourceDocument: entry.reference,
+      // Mục 10.0 — truy vết có cấu trúc: bút toán nhập tay thì không có chứng từ nguồn.
+      source: entry.sourceId
+        ? { type: entry.sourceType, id: entry.sourceId }
+        : null,
       history,
     };
   }

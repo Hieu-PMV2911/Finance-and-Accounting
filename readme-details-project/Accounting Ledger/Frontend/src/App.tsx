@@ -24,6 +24,11 @@ const AccountsPage = lazy(() =>
     default: module.AccountsPage,
   })),
 )
+const PartiesPage = lazy(() =>
+  import('@/features/parties/PartiesPage').then((module) => ({
+    default: module.PartiesPage,
+  })),
+)
 const JournalsPage = lazy(() =>
   import('@/features/journals/JournalsPage').then((module) => ({
     default: module.JournalsPage,
@@ -91,6 +96,7 @@ function App() {
                 <Route path="ledger" element={<LedgerPage />} />
                 <Route path="reports" element={<ReportsPage />} />
                 <Route path="accounts" element={<AccountsPage />} />
+                <Route path="parties" element={<PartiesPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="jobs" element={<JobsPage />} />
                 <Route path="notifications" element={<NotificationsPage />} />

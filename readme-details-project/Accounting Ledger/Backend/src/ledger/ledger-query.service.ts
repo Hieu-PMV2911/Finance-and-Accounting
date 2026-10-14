@@ -8,8 +8,10 @@ import { normalBalanceOf } from '../common/enums/account-type.enum.js';
 import { moneyToString, toMoney } from '../common/utils/money.util.js';
 import { FiscalPeriod } from '../fiscal-periods/entities/fiscal-period.entity.js';
 import { JournalLine } from '../journals/entities/journal-line.entity.js';
+import { PartiesService } from '../parties/parties.service.js';
 import type { QueryGeneralLedgerDto } from './dto/query-general-ledger.dto.js';
 import type { QueryReconciliationDto } from './dto/query-reconciliation.dto.js';
+import type { QuerySubLedgerDto } from './dto/query-sub-ledger.dto.js';
 import type { QueryTrialBalanceDto } from './dto/query-trial-balance.dto.js';
 import { AccountBalance } from './entities/account-balance.entity.js';
 import type {
@@ -20,6 +22,10 @@ import type {
   TrialBalanceRow,
   TrialBalanceView,
 } from './interfaces/ledger-view.interface.js';
+import type {
+  SubLedgerLine,
+  SubLedgerView,
+} from './interfaces/sub-ledger-view.interface.js';
 import {
   aggregateAccountMovements,
   LEDGER_STATUSES,
@@ -36,6 +42,9 @@ import { netBalanceOf, splitNet } from './ledger-balance.util.js';
  * - `trial-balance` luôn tự cân (`Σ dư cuối Nợ = Σ dư cuối Có`) nếu dữ liệu đúng;
  * - `reconciliation` có sẵn nguồn độc lập để đối chiếu với `account_balances`
  *   (bất biến của DEVELOPMENT_PLAN: "số dư tái lập được từ journal_lines").
+ *
+ * Mục 10.0 bổ sung **`subLedger`**: sổ cái phụ theo đối tượng, đọc theo
+ * `journal_lines.party_id` — cùng nguyên tắc tái lập, không có bảng tổng hợp riêng.
  */
 @Injectable()
 export class LedgerQueryService {
@@ -48,6 +57,7 @@ export class LedgerQueryService {
     private readonly periods: Repository<FiscalPeriod>,
     @InjectRepository(AccountBalance)
     private readonly balances: Repository<AccountBalance>,
+    private readonly parties: PartiesService,
   ) {}
 
   // ------------------------------------------------------------ sổ cái
@@ -135,6 +145,120 @@ export class LedgerQueryService {
       totalCredit: moneyToString(totalCredit),
       closingDebit: closing.debit,
       closingCredit: closing.credit,
+    };
+  }
+
+  // ---------------------------------------------------------- sổ cái phụ
+
+  /**
+   * Sổ cái phụ theo **đối tượng** (mục 10.0) — "ai đang nợ mình / mình nợ ai".
+   *
+   * Lọc theo `journal_lines.party_id`, tùy chọn giới hạn thêm một tài khoản công nợ
+   * (131 hoặc 331). Cấu trúc trả về giống `generalLedger`: số dư đầu kỳ → từng phát
+   * sinh kèm số dư lũy kế → số dư cuối kỳ.
+   */
+  async subLedger(query: QuerySubLedgerDto): Promise<SubLedgerView> {
+    const party = await this.parties.findById(query.partyId);
+    const range = await resolveRange(this.periods, query);
+
+    const openingQb = this.lines
+      .createQueryBuilder('line')
+      .innerJoin('line.entry', 'entry')
+      .select('COALESCE(SUM(line.debit), 0)', 'debit')
+      .addSelect('COALESCE(SUM(line.credit), 0)', 'credit')
+      .where('line.partyId = :partyId', { partyId: party.id })
+      .andWhere('entry.status IN (:...statuses)', { statuses: LEDGER_STATUSES })
+      .andWhere('entry.date < :fromDate', { fromDate: range.fromDate });
+    if (query.accountId) {
+      openingQb.andWhere('line.accountId = :accountId', {
+        accountId: query.accountId,
+      });
+    }
+
+    const openingRow = await openingQb.getRawOne<{
+      debit: string;
+      credit: string;
+    }>();
+    const openingNet = toMoney(openingRow?.debit).minus(
+      toMoney(openingRow?.credit),
+    );
+
+    const rowsQb = this.lines
+      .createQueryBuilder('line')
+      .innerJoinAndSelect('line.entry', 'entry')
+      .innerJoinAndSelect('line.account', 'account')
+      .where('line.partyId = :partyId', { partyId: party.id })
+      .andWhere('entry.status IN (:...statuses)', { statuses: LEDGER_STATUSES })
+      .andWhere('entry.date >= :fromDate', { fromDate: range.fromDate })
+      .andWhere('entry.date <= :toDate', { toDate: range.toDate })
+      .orderBy('entry.date', 'ASC')
+      .addOrderBy('entry.entryNo', 'ASC')
+      .addOrderBy('line.lineNo', 'ASC')
+      .take(query.limit ?? 500)
+      .skip(query.offset ?? 0);
+    if (query.accountId) {
+      rowsQb.andWhere('line.accountId = :accountId', {
+        accountId: query.accountId,
+      });
+    }
+
+    const rows = await rowsQb.getMany();
+
+    let running = openingNet;
+    let totalDebit = new Decimal(0);
+    let totalCredit = new Decimal(0);
+    const accountCodes = new Set<string>();
+    const lines: SubLedgerLine[] = [];
+
+    for (const line of rows) {
+      const debit = toMoney(line.debit);
+      const credit = toMoney(line.credit);
+      running = running.plus(debit).minus(credit);
+      totalDebit = totalDebit.plus(debit);
+      totalCredit = totalCredit.plus(credit);
+
+      const accountCode = line.account?.code ?? '';
+      if (accountCode) accountCodes.add(accountCode);
+
+      const balance = splitNet(running);
+      lines.push({
+        journalEntryId: line.entryId,
+        entryNo: line.entry?.entryNo ?? null,
+        date: line.entry?.date ?? '',
+        description: line.entry?.description ?? '',
+        reference: line.entry?.reference ?? null,
+        accountId: line.accountId,
+        accountCode,
+        accountName: line.account?.name ?? '',
+        lineDescription: line.description,
+        debit: moneyToString(debit),
+        credit: moneyToString(credit),
+        balanceDebit: balance.debit,
+        balanceCredit: balance.credit,
+      });
+    }
+
+    const opening = splitNet(openingNet);
+    const closing = splitNet(running);
+
+    return {
+      partyId: party.id,
+      partyCode: party.code,
+      partyName: party.name,
+      partyType: party.type,
+      fromDate: range.fromDate,
+      toDate: range.toDate,
+      periodId: range.period?.id ?? null,
+      periodCode: range.period?.code ?? null,
+      accountCodes: [...accountCodes].sort(),
+      openingDebit: opening.debit,
+      openingCredit: opening.credit,
+      lines,
+      totalDebit: moneyToString(totalDebit),
+      totalCredit: moneyToString(totalCredit),
+      closingDebit: closing.debit,
+      closingCredit: closing.credit,
+      netClosing: moneyToString(running),
     };
   }
 

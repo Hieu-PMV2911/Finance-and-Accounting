@@ -37,4 +37,13 @@ export class CreateJournalLineDto {
   @IsString()
   @MaxLength(500, { message: 'Diễn giải dòng tối đa 500 ký tự' })
   description?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Đối tượng của sổ cái phụ (mục 10.0). Chỉ hợp lệ trên dòng thuộc tài khoản công nợ 131*/331*.',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'partyId không hợp lệ' })
+  partyId?: string;
 }
