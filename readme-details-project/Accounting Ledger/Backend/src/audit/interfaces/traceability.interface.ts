@@ -6,6 +6,15 @@ export interface JournalSource {
   type: SourceType;
   /** Id chứng từ nguồn — mở ra được hóa đơn / phiếu thu / dòng sao kê tương ứng. */
   id: string;
+  /**
+   * Số chứng từ đọc từ **chính bảng nghiệp vụ** (mục 10.0).
+   *
+   * Khác `sourceDocument` (chuỗi `reference` do người lập gõ, có thể sai hoặc trùng):
+   * đây là số chứng từ thật, tra được ngay trên hóa đơn/phiếu ⇒ giao diện mở thẳng
+   * chứng từ gốc mà không phải đoán. `null` khi loại nguồn chưa có bảng tra
+   * (`bank_transaction`/`provider_event` — mục 10.B) hoặc bản ghi đã bị xóa.
+   */
+  code: string | null;
 }
 
 /** Một dòng định khoản trong kết quả truy vết. */

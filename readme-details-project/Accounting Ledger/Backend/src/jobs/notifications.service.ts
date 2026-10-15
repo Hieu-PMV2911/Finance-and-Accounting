@@ -32,6 +32,7 @@ export interface CreateNotificationInput {
  *
  * - `all`      : ai cũng thấy.
  * - `admin`    : chỉ `admin` thấy (cảnh báo bất biến, sự cố hệ thống).
+ * - `poster`   : `poster` và `admin` thấy (cảnh báo cần hành động ghi sổ).
  * - `targeted` : chỉ `targetUserId` thấy (vd báo cáo của chính người yêu cầu).
  */
 @Injectable()
@@ -142,8 +143,8 @@ export class NotificationsService {
 
   /**
    * Điều kiện phạm vi hiển thị:
-   * gửi đích danh cho tôi, **hoặc** gửi chung, **hoặc** gửi cho quản trị (nếu tôi
-   * là quản trị).
+   * gửi đích danh cho tôi, **hoặc** gửi chung, **hoặc** gửi cho nhóm tôi thuộc
+   * (quản trị / người ghi sổ).
    */
   private visibilityClause(user: AuthUser): {
     sql: string;
@@ -154,12 +155,15 @@ export class NotificationsService {
       sql: `(n.targetUserId = :viewerId
              OR (n.targetUserId IS NULL
                  AND (n.audience = :audienceAll
-                      OR (n.audience = :audienceAdmin AND :isAdmin = true))))`,
+                      OR (n.audience = :audienceAdmin AND :isAdmin = true)
+                      OR (n.audience = :audiencePoster AND :canPost = true))))`,
       params: {
         viewerId: user.id,
         audienceAll: NotificationAudience.ALL,
         audienceAdmin: NotificationAudience.ADMIN,
+        audiencePoster: NotificationAudience.POSTER,
         isAdmin,
+        canPost: isAdmin || user.roles.includes(Role.POSTER),
       },
     };
   }
@@ -168,6 +172,11 @@ export class NotificationsService {
     if (notification.targetUserId) return notification.targetUserId === user.id;
     if (notification.audience === NotificationAudience.ADMIN) {
       return user.roles.includes(Role.ADMIN);
+    }
+    if (notification.audience === NotificationAudience.POSTER) {
+      return (
+        user.roles.includes(Role.ADMIN) || user.roles.includes(Role.POSTER)
+      );
     }
     return true;
   }

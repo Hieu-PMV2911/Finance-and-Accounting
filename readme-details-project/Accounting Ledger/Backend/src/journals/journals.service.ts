@@ -158,6 +158,23 @@ export class JournalsService {
     dto: CreateJournalEntryDto,
     actorId: string,
   ): Promise<JournalEntry> {
+    return this.dataSource.transaction((manager) =>
+      this.createWithin(manager, dto, actorId),
+    );
+  }
+
+  /**
+   * **Bên trong một transaction** — tạo bút toán nháp.
+   *
+   * Tách ra để `create` (bút toán nhập tay) và `postDocument` (chứng từ 10.A ghi sổ
+   * kèm cập nhật chứng từ) dùng chung **đúng một** luật, và để phần ghi của chứng từ
+   * xảy ra trong cùng transaction với bút toán.
+   */
+  private async createWithin(
+    manager: EntityManager,
+    dto: CreateJournalEntryDto,
+    actorId: string,
+  ): Promise<JournalEntry> {
     const idempotencyKey = dto.idempotencyKey?.trim() || null;
 
     if (idempotencyKey) {
@@ -176,12 +193,12 @@ export class JournalsService {
     const sourceId = dto.sourceId?.trim() || null;
     this.assertSourcePair(sourceType, sourceId);
     if (sourceId) {
-      await this.assertSourceUnused(sourceType, sourceId);
+      await this.assertSourceUnused(manager, sourceType, sourceId);
     }
 
     const normalized = await this.normalizeLines(dto.lines);
 
-    const entry = this.entries.create({
+    const entry = manager.create(JournalEntry, {
       entryNo: null,
       date: dto.date,
       periodId: period.id,
@@ -195,7 +212,7 @@ export class JournalsService {
       idempotencyKey,
       createdBy: actorId,
       lines: normalized.lines.map((line) =>
-        this.lines.create({
+        manager.create(JournalLine, {
           lineNo: line.lineNo,
           accountId: line.accountId,
           partyId: line.partyId,
@@ -207,7 +224,7 @@ export class JournalsService {
     });
 
     try {
-      return await this.entries.save(entry);
+      return await manager.save(JournalEntry, entry);
     } catch (error) {
       // Hai request đồng thời cùng khóa: bản ghi thắng đã tồn tại ⇒ trả về nó.
       if (idempotencyKey) {
@@ -218,7 +235,7 @@ export class JournalsService {
       }
       // Hai request đồng thời cùng chứng từ nguồn: unique index chặn bản thứ hai.
       if (sourceId) {
-        const existing = await this.entries.findOne({
+        const existing = await manager.findOne(JournalEntry, {
           where: { sourceType, sourceId },
         });
         if (existing) {
@@ -319,7 +336,22 @@ export class JournalsService {
    * 5. Cập nhật số dư từng tài khoản (khóa bi quan từng dòng số dư).
    */
   async post(id: string, actorId: string): Promise<JournalEntry> {
-    return this.dataSource.transaction(async (manager) => {
+    return this.dataSource.transaction((manager) =>
+      this.postWithin(manager, id, actorId),
+    );
+  }
+
+  /**
+   * **Bên trong một transaction** — ghi sổ bút toán đã xác nhận.
+   *
+   * Năm bước (khóa bút toán → khóa kỳ → cân bằng lại → cấp số hiệu → cập nhật số dư)
+   * đều trên `manager` được truyền vào, nên có thể ghép với việc cập nhật chứng từ nguồn.
+   */
+  private async postWithin(
+    manager: EntityManager,
+    id: string,
+    actorId: string,
+  ): Promise<JournalEntry> {
       const entry = await this.lockEntryWithLines(manager, id);
 
       // Ghi sổ là thao tác idempotent: gọi lại không sinh phát sinh thêm.
@@ -356,6 +388,51 @@ export class JournalsService {
       );
 
       return entry;
+  }
+
+  /**
+   * Tạo **và** ghi sổ bút toán cho chứng từ nguồn, cộng việc cập nhật chính chứng từ đó
+   * (`commit`) — **cùng một transaction** (mục 10.A, quyết định #1).
+   *
+   * Vì sao phải gộp: nếu để chứng từ (hóa đơn/phiếu thu) ghi trạng thái ở một transaction
+   * riêng thì sự cố giữa hai bước để lại "bút toán đã ghi sổ nhưng hóa đơn còn approved" —
+   * chạy lại bị `UNIQUE(source_type, source_id)` chặn và hóa đơn kẹt vĩnh viễn. Gộp lại thì
+   * hoặc tất cả thành công, hoặc không có gì — kể cả bút toán.
+   *
+   * `commit` chạy **trong** transaction nên chỉ được phép dùng `manager` (không mở transaction
+   * lồng); webhook nên phát **sau khi** hàm này trả về (đã commit). Không có gì được tạo ra ngoài
+   * transaction này ⇒ mọi trường hợp lỗi đều rollback về trạng thái chứng từ còn nháp/xác nhận.
+   */
+  async postDocument(
+    dto: CreateJournalEntryDto,
+    actorId: string,
+    commit: (manager: EntityManager, entry: JournalEntry) => Promise<void>,
+  ): Promise<JournalEntry> {
+    return this.dataSource.transaction(async (manager) => {
+      const entry = await this.createWithin(manager, dto, actorId);
+      const posted = await this.postWithin(manager, entry.id, actorId);
+      await commit(manager, posted);
+      return posted;
+    });
+  }
+
+  /**
+   * Đảo bút toán đã ghi sổ **và** cập nhật chứng từ nguồn trong cùng transaction —
+   * bản dựng của `reverseDocument` cho hóa đơn/phiếu (mục 10.A).
+   *
+   * Cùng lý do với `postDocument`: đảo xong mà chứng từ chưa chuyển `voided` thì chạy lại
+   * sẽ gặp bút toán gốc đã `reversed` và không thoát ra được.
+   */
+  async reverseDocument(
+    id: string,
+    dto: ReverseJournalEntryDto,
+    actorId: string,
+    commit: (manager: EntityManager, reversal: JournalEntry) => Promise<void>,
+  ): Promise<JournalEntry> {
+    return this.dataSource.transaction(async (manager) => {
+      const reversal = await this.reverseWithin(manager, id, dto, actorId);
+      await commit(manager, reversal);
+      return reversal;
     });
   }
 
@@ -372,7 +449,23 @@ export class JournalsService {
     dto: ReverseJournalEntryDto,
     actorId: string,
   ): Promise<JournalEntry> {
-    return this.dataSource.transaction(async (manager) => {
+    return this.dataSource.transaction((manager) =>
+      this.reverseWithin(manager, id, dto, actorId),
+    );
+  }
+
+  /**
+   * **Bên trong một transaction** — đảo bút toán đã ghi sổ.
+   *
+   * Dùng được cho cả `reverse` (bút toán nhập tay) lẫn `reverseDocument` (hóa đơn/phiếu
+   * cập nhật trạng thái trong cùng transaction).
+   */
+  private async reverseWithin(
+    manager: EntityManager,
+    id: string,
+    dto: ReverseJournalEntryDto,
+    actorId: string,
+  ): Promise<JournalEntry> {
       const original = await this.lockEntryWithLines(manager, id);
 
       if (original.status !== JournalStatus.POSTED) {
@@ -444,7 +537,6 @@ export class JournalsService {
       await manager.save(JournalEntry, original);
 
       return savedReversal;
-    });
   }
 
   // -------------------------------------------------------------- helpers
@@ -502,10 +594,11 @@ export class JournalsService {
    * ở DB vẫn là lá chắn cuối cho trường hợp hai request chạy song song.
    */
   private async assertSourceUnused(
+    manager: EntityManager,
     sourceType: SourceType,
     sourceId: string,
   ): Promise<void> {
-    const existing = await this.entries.findOne({
+    const existing = await manager.findOne(JournalEntry, {
       where: { sourceType, sourceId },
     });
     if (existing) {

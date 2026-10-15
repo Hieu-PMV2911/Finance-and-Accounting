@@ -8,6 +8,14 @@ export enum WebhookEventType {
   PERIOD_CLOSED = 'period.closed',
   /** Phát hiện vi phạm bất biến. */
   INTEGRITY_VIOLATION = 'integrity.violation',
+  /** Hóa đơn bán đã ghi sổ (mục 10.A). */
+  SALES_INVOICE_POSTED = 'sales_invoice.posted',
+  /** Hóa đơn mua đã ghi sổ (mục 10.A). */
+  VENDOR_BILL_POSTED = 'vendor_bill.posted',
+  /** Phiếu thu/chi đã ghi sổ (mục 10.A). */
+  PAYMENT_POSTED = 'payment.posted',
+  /** Có hóa đơn bán quá hạn thanh toán (mục 10.A). */
+  INVOICE_OVERDUE = 'invoice.overdue',
   /** Webhook thử nghiệm (gọi từ giao diện để kiểm tra endpoint). */
   PING = 'ping',
 }
@@ -20,6 +28,10 @@ export const WEBHOOK_EVENT_LABELS: Record<WebhookEventType, string> = {
   [WebhookEventType.JOURNAL_REVERSED]: 'Bút toán đã đảo',
   [WebhookEventType.PERIOD_CLOSED]: 'Kỳ kế toán đã chốt',
   [WebhookEventType.INTEGRITY_VIOLATION]: 'Vi phạm bất biến',
+  [WebhookEventType.SALES_INVOICE_POSTED]: 'Hóa đơn bán đã ghi sổ',
+  [WebhookEventType.VENDOR_BILL_POSTED]: 'Hóa đơn mua đã ghi sổ',
+  [WebhookEventType.PAYMENT_POSTED]: 'Phiếu thu/chi đã ghi sổ',
+  [WebhookEventType.INVOICE_OVERDUE]: 'Hóa đơn quá hạn',
   [WebhookEventType.PING]: 'Thử nghiệm',
 };
 

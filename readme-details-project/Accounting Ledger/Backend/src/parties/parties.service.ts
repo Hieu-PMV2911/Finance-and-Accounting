@@ -5,13 +5,39 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { Decimal } from 'decimal.js';
 import { DataSource, Repository } from 'typeorm';
 
-import { moneyToString } from '../common/utils/money.util.js';
+import type { PartyType } from '../common/enums/party-type.enum.js';
+import { moneyToString, toMoney } from '../common/utils/money.util.js';
+import { LEDGER_STATUSES } from '../ledger/ledger-aggregate.util.js';
 import type { CreatePartyDto } from './dto/create-party.dto.js';
 import type { QueryPartiesDto } from './dto/query-parties.dto.js';
 import type { UpdatePartyDto } from './dto/update-party.dto.js';
 import { Party } from './entities/party.entity.js';
+
+/** Số dư công nợ của đối tượng theo **một tài khoản** (131*, 331*…). */
+export interface PartyAccountBalance {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  debit: string;
+  credit: string;
+  /** Số dư thuần: dương = dư Nợ, âm = dư Có (bất biến số 9). */
+  netDebit: string;
+}
+
+/** Tổng hợp công nợ một đối tượng — phục vụ trang "Công nợ" và kiểm tra chéo số dư. */
+export interface PartySummaryView {
+  partyId: string;
+  partyCode: string;
+  partyName: string;
+  partyType: PartyType;
+  isActive: boolean;
+  journalLines: number;
+  accounts: PartyAccountBalance[];
+  totals: { debit: string; credit: string; netDebit: string };
+}
 
 /**
  * Đối tượng của sổ cái phụ (mục 10.0) — khách hàng / nhà cung cấp.
@@ -158,6 +184,77 @@ export class PartiesService {
     }
 
     await this.parties.remove(party);
+  }
+
+  /**
+   * Tổng hợp công nợ của một đối tượng (mục 10.A).
+   *
+   * Đọc **trực tiếp từ `journal_lines`** của bút toán POSTED/REVERSED — không có bảng
+   * tổng hợp nào để lệch. Bút toán gốc đã `reversed` và bút toán đảo cùng được tính nên
+   * triệt tiêu nhau, đúng bất biến số 9 (số dư là số dư **thuần**).
+   */
+  async summary(id: string): Promise<PartySummaryView> {
+    const party = await this.findById(id);
+
+    const rows = await this.dataSource.query<
+      {
+        account_id: string;
+        account_code: string;
+        account_name: string;
+        debit: string;
+        credit: string;
+      }[]
+    >(
+      `SELECT a.id AS account_id,
+              a.code AS account_code,
+              a.name AS account_name,
+              COALESCE(SUM(l.debit), 0) AS debit,
+              COALESCE(SUM(l.credit), 0) AS credit
+         FROM journal_lines l
+         JOIN journal_entries e ON e.id = l.entry_id
+         JOIN accounts a ON a.id = l.account_id
+        WHERE l.party_id = $1
+          AND e.status::text = ANY($2)
+        GROUP BY a.id, a.code, a.name
+        ORDER BY a.code`,
+      [party.id, [...LEDGER_STATUSES]],
+    );
+
+    const accounts: PartyAccountBalance[] = rows.map((row) => {
+      const net = toMoney(row.debit).minus(toMoney(row.credit));
+      return {
+        accountId: row.account_id,
+        accountCode: row.account_code,
+        accountName: row.account_name,
+        debit: moneyToString(toMoney(row.debit)),
+        credit: moneyToString(toMoney(row.credit)),
+        netDebit: moneyToString(net),
+      };
+    });
+
+    const totalDebit = accounts.reduce(
+      (sum, account) => sum.plus(toMoney(account.debit)),
+      new Decimal(0),
+    );
+    const totalCredit = accounts.reduce(
+      (sum, account) => sum.plus(toMoney(account.credit)),
+      new Decimal(0),
+    );
+
+    return {
+      partyId: party.id,
+      partyCode: party.code,
+      partyName: party.name,
+      partyType: party.type,
+      isActive: party.isActive,
+      journalLines: await this.usageCount(party.id),
+      accounts,
+      totals: {
+        debit: moneyToString(totalDebit),
+        credit: moneyToString(totalCredit),
+        netDebit: moneyToString(totalDebit.minus(totalCredit)),
+      },
+    };
   }
 
   /** Số dòng định khoản đang gắn đối tượng này (đếm trực tiếp trên `journal_lines`). */

@@ -77,6 +77,26 @@ export class VendorBill {
   @Column({ name: 'posted_at', type: 'timestamptz', nullable: true })
   postedAt: Date | null;
 
+  @Column({ name: 'approved_at', type: 'timestamptz', nullable: true })
+  approvedAt: Date | null;
+
+  /**
+   * Bút toán **đảo** sinh ra khi hủy hóa đơn mua đã ghi sổ.
+   * Bút toán gốc (`journalEntryId`) không bao giờ bị sửa/xóa — bất biến số 2.
+   */
+  @Column({ name: 'reversal_journal_entry_id', type: 'uuid', nullable: true })
+  reversalJournalEntryId: string | null;
+
+  @Column({ name: 'voided_by', type: 'uuid', nullable: true })
+  voidedBy: string | null;
+
+  @Column({ name: 'voided_at', type: 'timestamptz', nullable: true })
+  voidedAt: Date | null;
+
+  /** Lý do hủy — bắt buộc, để vết kiểm toán giải thích được vì sao chứng từ biến mất. */
+  @Column({ name: 'void_reason', type: 'varchar', length: 500, nullable: true })
+  voidReason: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

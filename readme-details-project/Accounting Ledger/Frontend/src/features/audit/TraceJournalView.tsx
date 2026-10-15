@@ -19,6 +19,7 @@ import {
   AUDIT_ACTION_LABELS,
   AUDIT_ENTITY_LABELS,
   JOURNAL_STATUS_LABELS,
+  SOURCE_TYPE_LABELS,
   type JournalStatus,
 } from '@/types/api'
 import { traceJournalEntry } from './audit.api'
@@ -94,8 +95,27 @@ export function TraceJournalView({ entryId }: { entryId: string }) {
             Chứng từ nguồn
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          {trace.sourceDocument ? (
+        <CardContent className="flex flex-col gap-2">
+          {trace.source ? (
+            <>
+              {/* Ưu tiên số đọc từ chính bảng nghiệp vụ (mục 10.0) — đáng tin hơn
+                  chuỗi `reference` người lập gõ; khi chưa có thì rơi về chuỗi cũ. */}
+              <p className="font-mono text-lg font-semibold">
+                {trace.source.code ?? trace.sourceDocument ?? trace.source.id}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">
+                  {SOURCE_TYPE_LABELS[trace.source.type] ?? trace.source.type}
+                </Badge>
+                {trace.sourceDocument &&
+                  trace.sourceDocument !== trace.source.code && (
+                    <span className="text-muted-foreground text-sm">
+                      Tham chiếu trên bút toán: {trace.sourceDocument}
+                    </span>
+                  )}
+              </div>
+            </>
+          ) : trace.sourceDocument ? (
             <p className="font-mono text-lg font-semibold">
               {trace.sourceDocument}
             </p>

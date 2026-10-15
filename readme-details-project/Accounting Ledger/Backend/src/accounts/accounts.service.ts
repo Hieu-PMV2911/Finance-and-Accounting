@@ -118,6 +118,26 @@ export class AccountsService {
   }
 
   /**
+   * Lấy tài khoản **kiểm soát** để ghi sổ theo tiền tố mã (131/331/111/112…).
+   *
+   * Khác `findOneByCodePattern` ở chỗ **không im lặng**: chưa cấu hình tài khoản thì báo
+   * lỗi kèm hướng dẫn, và kết quả luôn là tài khoản **lá, đang hoạt động**. Dùng chung cho
+   * hóa đơn bán/mua và phiếu thu/chi để ba nơi không tự viết lại cùng một quy tắc.
+   */
+  async requirePostableByCodePrefix(
+    prefix: string,
+    label: string,
+  ): Promise<Account> {
+    const found = await this.findOneByCodePattern(prefix);
+    if (!found) {
+      throw new BadRequestException(
+        `Không tìm thấy tài khoản ${label} để ghi sổ chứng từ`,
+      );
+    }
+    return this.getPostable(found.id);
+  }
+
+  /**
    * Lấy tài khoản để ghi sổ — chặn nếu tài khoản tổng hợp hoặc đã ngừng dùng.
    * Dùng bởi module Journals khi tạo bút toán.
    */

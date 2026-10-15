@@ -234,6 +234,16 @@ export type SourceType =
   | 'bank_transaction'
   | 'provider_event'
 
+/** Nhãn hiển thị cho loại chứng từ nguồn (truy vết, mục 10.0). */
+export const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
+  manual: 'Bút toán nhập tay',
+  sales_invoice: 'Hóa đơn bán',
+  vendor_bill: 'Hóa đơn mua',
+  payment: 'Phiếu thu / chi',
+  bank_transaction: 'Dòng sao kê ngân hàng',
+  provider_event: 'Sự kiện thanh toán',
+}
+
 export interface JournalLine {
   id: string
   entryId: string
@@ -601,6 +611,8 @@ export interface TraceJournalLine {
 export interface JournalSource {
   type: SourceType
   id: string
+  /** Số chứng từ đọc từ chính bảng nghiệp vụ; `null` khi loại nguồn chưa có bảng tra. */
+  code: string | null
 }
 
 export interface JournalTraceability {
@@ -666,6 +678,7 @@ export type JobName =
   | 'integrity-check'
   | 'send-notification'
   | 'debt-reminder'
+  | 'overdue-invoice-sweep'
   | 'deliver-webhook'
   | 'webhook-sweep'
 
@@ -790,6 +803,7 @@ export const JOB_NAME_LABELS: Record<string, string> = {
   'integrity-check': 'Kiểm tra bất biến',
   'send-notification': 'Gửi thông báo',
   'debt-reminder': 'Nhắc công nợ',
+  'overdue-invoice-sweep': 'Quét hóa đơn quá hạn',
   'deliver-webhook': 'Giao webhook',
   'webhook-sweep': 'Quét webhook treo',
 }
@@ -798,13 +812,15 @@ export const JOB_NAME_LABELS: Record<string, string> = {
 
 export type AppNotificationType =
   | 'debt-reminder'
+  | 'overdue-invoice'
   | 'report-ready'
   | 'integrity-alert'
   | 'system'
 
 export type AppNotificationSeverity = 'info' | 'warning' | 'critical'
 export type AppNotificationStatus = 'unread' | 'read'
-export type AppNotificationAudience = 'all' | 'admin' | 'targeted'
+/** `poster` = người ghi sổ **và** quản trị (cảnh báo cần hành động ghi sổ). */
+export type AppNotificationAudience = 'all' | 'admin' | 'poster' | 'targeted'
 
 /** Thông báo trong hệ thống (bảng `notifications`). */
 export interface AppNotification {
@@ -833,6 +849,7 @@ export interface NotificationFilters {
 
 export const NOTIFICATION_TYPE_LABELS: Record<AppNotificationType, string> = {
   'debt-reminder': 'Nhắc công nợ',
+  'overdue-invoice': 'Hóa đơn quá hạn',
   'report-ready': 'Báo cáo sẵn sàng',
   'integrity-alert': 'Cảnh báo bất biến',
   system: 'Hệ thống',
@@ -964,6 +981,10 @@ export type WebhookEventType =
   | 'journal.reversed'
   | 'period.closed'
   | 'integrity.violation'
+  | 'sales_invoice.posted'
+  | 'vendor_bill.posted'
+  | 'payment.posted'
+  | 'invoice.overdue'
   | 'ping'
 
 export type WebhookDeliveryStatus = 'pending' | 'delivered' | 'failed'
@@ -1051,6 +1072,10 @@ export const WEBHOOK_EVENT_TYPES: WebhookEventType[] = [
   'journal.reversed',
   'period.closed',
   'integrity.violation',
+  'sales_invoice.posted',
+  'vendor_bill.posted',
+  'payment.posted',
+  'invoice.overdue',
   'ping',
 ]
 
@@ -1059,6 +1084,10 @@ export const WEBHOOK_EVENT_LABELS: Record<WebhookEventType, string> = {
   'journal.reversed': 'Bút toán đã đảo',
   'period.closed': 'Kỳ kế toán đã chốt',
   'integrity.violation': 'Vi phạm bất biến',
+  'sales_invoice.posted': 'Hóa đơn bán đã ghi sổ',
+  'vendor_bill.posted': 'Hóa đơn mua đã ghi sổ',
+  'payment.posted': 'Phiếu thu/chi đã ghi sổ',
+  'invoice.overdue': 'Hóa đơn quá hạn',
   ping: 'Thử nghiệm',
 }
 

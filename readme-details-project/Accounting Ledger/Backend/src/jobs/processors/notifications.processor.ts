@@ -5,10 +5,12 @@ import { DebtReminderService } from '../debt-reminder.service.js';
 import { JobName, JobQueue } from '../enums/job.enum.js';
 import type {
   DebtReminderPayload,
+  OverdueInvoiceSweepPayload,
   SendNotificationPayload,
 } from '../interfaces/job-payload.interface.js';
 import { JobRunsService } from '../job-runs.service.js';
 import { NotificationsService } from '../notifications.service.js';
+import { OverdueInvoiceSweepService } from '../overdue-invoice-sweep.service.js';
 import { TrackedWorkerHost } from './tracked-worker-host.js';
 
 /**
@@ -18,9 +20,12 @@ import { TrackedWorkerHost } from './tracked-worker-host.js';
  * nhờ vậy việc sinh báo cáo nặng không phải chờ ghi thông báo, và nếu kênh nhận
  * thông báo đổi (thêm email/SMS/Zalo sau này) thì chỉ cần sửa một processor.
  *
- * Hai loại job:
+ * Ba loại job:
  * - `send-notification`: ghi một thông báo theo payload (dùng cho mọi job khác).
- * - `debt-reminder`: tổng hợp công nợ 131/331 rồi tự tạo thông báo nhắc nhở.
+ * - `debt-reminder`: tổng hợp công nợ 131/331 + tuổi nợ theo đối tượng rồi tự tạo
+ *   thông báo nhắc nhở.
+ * - `overdue-invoice-sweep`: quét hóa đơn bán quá hạn (mục 10.A) → thông báo
+ *   cho quản trị **và** phát webhook `invoice.overdue`.
  */
 @Processor(JobQueue.NOTIFICATIONS)
 export class NotificationsProcessor extends TrackedWorkerHost {
@@ -28,6 +33,7 @@ export class NotificationsProcessor extends TrackedWorkerHost {
     runs: JobRunsService,
     private readonly notifications: NotificationsService,
     private readonly debtReminder: DebtReminderService,
+    private readonly overdueSweep: OverdueInvoiceSweepService,
   ) {
     super(runs);
   }
@@ -38,6 +44,8 @@ export class NotificationsProcessor extends TrackedWorkerHost {
         return this.send(job);
       case JobName.DEBT_REMINDER:
         return this.remindDebt(job);
+      case JobName.OVERDUE_INVOICE_SWEEP:
+        return this.sweepOverdueInvoices(job);
       default:
         throw new Error(`Job "${job.name}" không được hỗ trợ ở hàng đợi thông báo`);
     }
@@ -70,9 +78,31 @@ export class NotificationsProcessor extends TrackedWorkerHost {
       asOfDate: summary.asOfDate,
       totalReceivable: summary.totalReceivable,
       totalPayable: summary.totalPayable,
-      receivableAccounts: summary.receivables.length,
-      payableAccounts: summary.payables.length,
+      receivableAccounts: summary.receivableAccounts.length,
+      payableAccounts: summary.payableAccounts.length,
+      // Mục 10.A — tóm tắt phần theo đối tượng + tuổi nợ để "Xử lý bất đồng bộ" hiển thị được.
+      receivableParties: summary.receivablesAging.parties.length,
+      payableParties: summary.payablesAging.parties.length,
+      receivableOverdue: summary.receivablesAging.totalOverdue,
+      payableOverdue: summary.payablesAging.totalOverdue,
       notificationId: summary.notificationId,
+    };
+  }
+
+  private async sweepOverdueInvoices(
+    job: Job,
+  ): Promise<Record<string, unknown>> {
+    const payload = job.data as OverdueInvoiceSweepPayload;
+    const summary = await this.overdueSweep.run({ asOfDate: payload.asOfDate });
+
+    return {
+      asOfDate: summary.asOfDate,
+      overdueInvoices: summary.overdueInvoices,
+      overdueParties: summary.overdueParties,
+      totalOverdue: summary.totalOverdue,
+      oldestDaysOverdue: summary.oldestDaysOverdue,
+      notificationId: summary.notificationId,
+      webhookDeliveries: summary.webhookDeliveries,
     };
   }
 }

@@ -1,19 +1,40 @@
 import { Global, Module } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
+import { AccountDefaultsModule } from './account-defaults/account-defaults.module.js';
+import { AccountDefaultsService } from './account-defaults/account-defaults.service.js';
+import { AccountDefaultRule } from './account-defaults/entities/account-default-rule.entity.js';
 import { AccountsModule } from './accounts/accounts.module.js';
 import { AccountsService } from './accounts/accounts.service.js';
 import { Account } from './accounts/entities/account.entity.js';
+import { Allocation } from './allocations/entities/allocation.entity.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuditService } from './audit/audit.service.js';
 import { AuditLog } from './audit/entities/audit-log.entity.js';
+import { VendorBillsModule } from './bills/vendor-bills.module.js';
+import { VendorBillsService } from './bills/vendor-bills.service.js';
+import {
+  VendorBill,
+  VendorBillLine,
+} from './bills/entities/vendor-bill.entity.js';
 import { CommonModule } from './common/common.module.js';
 import { FiscalPeriod } from './fiscal-periods/entities/fiscal-period.entity.js';
 import { FiscalPeriodsModule } from './fiscal-periods/fiscal-periods.module.js';
 import { FiscalPeriodsService } from './fiscal-periods/fiscal-periods.service.js';
+import { SalesInvoicesModule } from './invoices/sales-invoices.module.js';
+import { SalesInvoicesService } from './invoices/sales-invoices.service.js';
+import {
+  SalesInvoice,
+  SalesInvoiceLine,
+} from './invoices/entities/sales-invoice.entity.js';
+import { JobRun } from './jobs/entities/job-run.entity.js';
+import { Notification } from './jobs/entities/notification.entity.js';
+import { WebhookDelivery } from './jobs/entities/webhook-delivery.entity.js';
+import { WebhookEndpoint } from './jobs/entities/webhook-endpoint.entity.js';
+import { WebhookEvent } from './jobs/entities/webhook-event.entity.js';
 import { JournalEntry } from './journals/entities/journal-entry.entity.js';
 import { JournalLine } from './journals/entities/journal-line.entity.js';
 import { JournalsModule } from './journals/journals.module.js';
@@ -22,6 +43,10 @@ import { AccountBalance } from './ledger/entities/account-balance.entity.js';
 import { LedgerModule } from './ledger/ledger.module.js';
 import { LedgerService } from './ledger/ledger.service.js';
 import { Party } from './parties/entities/party.entity.js';
+import { Payment } from './payments/entities/payment.entity.js';
+import { PaymentsModule } from './payments/payments.module.js';
+import { PaymentsService } from './payments/payments.service.js';
+import { AgingReportService } from './reports/aging-report.service.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { ReportsService } from './reports/reports.service.js';
 import { RefreshToken } from './users/entities/refresh-token.entity.js';
@@ -46,6 +71,27 @@ import { UsersService } from './users/users.service.js';
   exports: [getDataSourceToken()],
 })
 class StubDataSourceModule {}
+
+/**
+ * Thay repository cho **cả cây `JobsModule`** (mục 9).
+ *
+ * Từ P1.4, hóa đơn bán / hóa đơn mua / phiếu thu-chi import `JobsModule` để phát
+ * webhook `*.posted` sau khi ghi sổ ⇒ DI test của chúng kéo theo toàn bộ provider của
+ * mục 9, mỗi provider lại cần repository riêng. Khai báo **một chỗ** để thêm bảng mới
+ * của mục 9 không phải sửa ba test rời rạc.
+ */
+function withJobsTree(builder: TestingModuleBuilder): TestingModuleBuilder {
+  for (const entity of [
+    JobRun,
+    Notification,
+    WebhookEndpoint,
+    WebhookDelivery,
+    WebhookEvent,
+  ]) {
+    builder.overrideProvider(getRepositoryToken(entity)).useValue({});
+  }
+  return builder;
+}
 
 /**
  * Một module được coi là **đã được nạp** ở AppModule khi, sau khi loại chú thích,
@@ -190,9 +236,10 @@ describe('Module wiring', () => {
     await moduleRef.close();
   });
 
-  it('ReportsModule khởi tạo được ReportsService', async () => {
+  it('ReportsModule khởi tạo được ReportsService và AgingReportService', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [ReportsModule],
+      // `AgingReportService` đọc thẳng bằng `DataSource.query` ⇒ cần stub.
+      imports: [StubDataSourceModule, ReportsModule],
     })
       .overrideProvider(getRepositoryToken(JournalLine))
       .useValue({})
@@ -203,6 +250,7 @@ describe('Module wiring', () => {
       .compile();
 
     expect(moduleRef.get(ReportsService)).toBeInstanceOf(ReportsService);
+    expect(moduleRef.get(AgingReportService)).toBeInstanceOf(AgingReportService);
     await moduleRef.close();
   });
 
@@ -228,6 +276,115 @@ describe('Module wiring', () => {
       .compile();
 
     expect(moduleRef.get(AuditService)).toBeInstanceOf(AuditService);
+    await moduleRef.close();
+  });
+
+  it('AccountDefaultsModule khởi tạo được AccountDefaultsService', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AccountDefaultsModule],
+    })
+      .overrideProvider(getRepositoryToken(AccountDefaultRule))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Account))
+      .useValue({})
+      .compile();
+
+    expect(moduleRef.get(AccountDefaultsService)).toBeInstanceOf(
+      AccountDefaultsService,
+    );
+    await moduleRef.close();
+  });
+
+  it('SalesInvoicesModule khởi tạo được SalesInvoicesService (kèm AccountDefaults + Parties + Journals)', async () => {
+    const moduleRef = await withJobsTree(
+      Test.createTestingModule({
+        imports: [StubDataSourceModule, SalesInvoicesModule],
+      })
+      .overrideProvider(getRepositoryToken(SalesInvoice))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(SalesInvoiceLine))
+      .useValue({})
+      // AllocationsModule cũng nằm trong cây import (chặn hủy khi còn phân bổ).
+      .overrideProvider(getRepositoryToken(Allocation))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(AccountDefaultRule))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Party))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Account))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(AccountBalance))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(FiscalPeriod))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(JournalEntry))
+      .useValue({})
+        .overrideProvider(getRepositoryToken(JournalLine))
+        .useValue({}),
+    ).compile();
+
+    expect(moduleRef.get(SalesInvoicesService)).toBeInstanceOf(
+      SalesInvoicesService,
+    );
+    await moduleRef.close();
+  });
+
+  it('VendorBillsModule khởi tạo được VendorBillsService (kèm AccountDefaults + Parties + Journals)', async () => {
+    const moduleRef = await withJobsTree(
+      Test.createTestingModule({
+        imports: [StubDataSourceModule, VendorBillsModule],
+      })
+      .overrideProvider(getRepositoryToken(VendorBill))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(VendorBillLine))
+      .useValue({})
+      // AllocationsModule cũng nằm trong cây import (chặn hủy khi còn phân bổ).
+      .overrideProvider(getRepositoryToken(Allocation))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(AccountDefaultRule))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Party))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Account))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(AccountBalance))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(FiscalPeriod))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(JournalEntry))
+      .useValue({})
+        .overrideProvider(getRepositoryToken(JournalLine))
+        .useValue({}),
+    ).compile();
+
+    expect(moduleRef.get(VendorBillsService)).toBeInstanceOf(VendorBillsService);
+    await moduleRef.close();
+  });
+
+  it('PaymentsModule khởi tạo được PaymentsService (kèm Allocations + Journals + Accounts)', async () => {
+    const moduleRef = await withJobsTree(
+      Test.createTestingModule({
+        imports: [StubDataSourceModule, PaymentsModule],
+      })
+      .overrideProvider(getRepositoryToken(Payment))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Allocation))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Party))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Account))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(AccountBalance))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(FiscalPeriod))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(JournalEntry))
+      .useValue({})
+        .overrideProvider(getRepositoryToken(JournalLine))
+        .useValue({}),
+    ).compile();
+
+    expect(moduleRef.get(PaymentsService)).toBeInstanceOf(PaymentsService);
     await moduleRef.close();
   });
 });

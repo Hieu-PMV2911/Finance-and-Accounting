@@ -85,8 +85,11 @@
     vào tài khoản cha, số hiệu trùng). Có vi phạm ⇒ thông báo cho `admin` +
     webhook `integrity.violation`.
   - `debt-reminder` — 08:00 thứ Hai: **nhắc công nợ** theo số dư tài khoản
-    131 (phải thu) và 331 (phải trả) ⇒ sinh thông báo. ⏳ Tuổi nợ theo từng
-    khách/nhà cung cấp cần dữ liệu hóa đơn của Mini ERP (mục 10).
+    131 (phải thu) và 331 (phải trả) **và** theo đối tượng + tuổi nợ từ hóa
+    đơn/phiếu đã ghi sổ (mục 10.A) ⇒ sinh thông báo.
+  - `overdue-invoice-sweep` — 09:00 hằng ngày (mục 10.A): quét hóa đơn bán **quá
+    hạn** theo `dueDate` và số còn lại sau phân bổ ⇒ thông báo cho `poster`/`admin`
+    + webhook `invoice.overdue`; không có gì quá hạn thì không gửi gì.
   - `webhook-retry-sweep` — mỗi 5 phút: đẩy lại webhook `pending` bị mất job.
 - ✅ **Job nền (BullMQ)** — 4 hàng đợi, mỗi hàng một processor:
   `reports` (sinh báo cáo nặng / xuất Excel-PDF), `maintenance` (chốt số dư,
@@ -117,19 +120,19 @@
 - ⏳ Còn lại: dead-letter queue riêng cho job thất bại vĩnh viễn, gửi email/SMS,
   Bull Board/UI giám sát chuyên sâu, và định kỳ dọn file báo cáo cũ.
 
-## 10. Mở rộng (dài hạn) — ⏳ kế hoạch chi tiết ở `../EXTENSION_PLAN.md`
+## 10. Mở rộng (dài hạn) — ✅ 10.0 & 10.A đã xong · ⏳ 10.B & 10.C (kế hoạch ở `../EXTENSION_PLAN.md`)
 
 Biến lõi sổ cái (mục 1–9) thành quy trình chứng từ: **Mini ERP** + **Payment & Reconciliation**,
 rồi lên **đa tiền tệ · đa công ty · thuế**. Bốn chiều thông tin còn thiếu phải bổ sung **trước**
 khi làm tính năng (xem `EXTENSION_PLAN.md` mục 3): **đối tượng (party)**, **chứng từ nguồn có cấu
 trúc (source_type/source_id)**, **phân bổ thanh toán (allocations)**, **tiền tệ & đơn vị**.
 
-| Giai đoạn | Nội dung | Ước lượng |
+| Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
-| **10.0 — Nền chung** | `parties` + `journal_lines.party_id` (sổ cái phụ theo đối tượng) · `journal_entries.source_type/source_id` + `UNIQUE(source_type, source_id)` · `allocations` · mở rộng truy vết | 2 tuần |
-| **10.A — Mini ERP** | Customer/Vendor, Sales Invoice, Vendor Bill, Phiếu thu/chi, **công nợ + tuổi nợ**, thanh toán một phần, báo cáo công nợ/doanh thu; nâng cấp `debt-reminder` theo đối tượng + tuổi nợ | 6–8 tuần |
-| **10.B — Payment & Reconciliation** | Vòng đời thanh toán (`initiated → authorized → captured → settled`, nhánh `unknown` cho timeout), idempotency, webhook + kết quả đến trễ, sao kê ngân hàng, khớp 3 tầng, **danh sách giao dịch lệch**, dead-letter queue | 6–8 tuần |
-| **10.C — Nâng cao** | Đa tiền tệ (bảng `exchange_rates` nhập tay + chênh lệch tỷ giá) → thuế GTGT (`tax_codes`) → **đa công ty** (migration riêng) | 4–6 tuần |
+| **10.0 — Nền chung** | `parties` (+ `summary`/`usage`) · `journal_lines.party_id` (sổ cái phụ `GET /ledger/sub-ledger`) · `journal_entries.source_type/source_id` + `UNIQUE(source_type, source_id)` · `allocations` · truy vết trả `source {type, id, code}` | ✅ xong |
+| **10.A — Mini ERP** | Customer/Vendor, Sales Invoice, Vendor Bill, Phiếu thu/chi + phân bổ, **công nợ + tuổi nợ** (`receivables-aging`/`payables-aging`/`revenue-by-party`), luật mặc định tài khoản, `approve/post/void` + bút toán đảo, webhook `*.posted` + `invoice.overdue` | ✅ xong (xem `../MUC-10-TIEP-THEO.md` — nghiệm thu qua HTTP còn ⛔ khi chưa có Postgres) |
+| **10.B — Payment & Reconciliation** | Vòng đời thanh toán (`initiated → authorized → captured → settled`, nhánh `unknown` cho timeout), idempotency, webhook + kết quả đến trễ, sao kê ngân hàng, khớp 3 tầng, **danh sách giao dịch lệch**, dead-letter queue | ⏳ kế hoạch |
+| **10.C — Nâng cao** | Đa tiền tệ (bảng `exchange_rates` nhập tay + chênh lệch tỷ giá) → thuế GTGT (`tax_codes`) → **đa công ty** (migration riêng) | ⏳ kế hoạch |
 
 **Nguyên tắc bất di bất dịch:** mọi chứng từ của mục 10 ghi sổ **qua `JournalsService`** trong cùng
 transaction (không có bộ máy ghi sổ thứ hai); một chứng từ nguồn chỉ sinh **một** bút toán gốc; sửa

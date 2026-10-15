@@ -52,6 +52,16 @@ export class PartiesController {
     return this.partiesService.findById(id);
   }
 
+  @Get(':id/summary')
+  @ApiOperation({
+    summary: 'Tổng hợp công nợ của đối tượng',
+    description:
+      'Số dư theo từng tài khoản công nợ, đọc trực tiếp từ journal_lines của bút toán đã ghi sổ — tái lập được, không dùng bảng tổng hợp.',
+  })
+  summary(@Param('id', ParseUUIDPipe) id: string) {
+    return this.partiesService.summary(id);
+  }
+
   @Get(':id/usage')
   @ApiOperation({
     summary: 'Số dòng định khoản đã gắn đối tượng',

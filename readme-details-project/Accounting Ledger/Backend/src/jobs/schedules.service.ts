@@ -30,6 +30,7 @@ export interface ScheduleDefinition {
 export const BALANCE_SNAPSHOT_CRON = '0 1 * * *';
 export const INTEGRITY_CHECK_CRON = '30 2 * * *';
 export const DEBT_REMINDER_CRON = '0 8 * * 1';
+export const OVERDUE_INVOICE_SWEEP_CRON = '0 9 * * *';
 export const WEBHOOK_SWEEP_CRON = '*/5 * * * *';
 
 export const SCHEDULE_DEFINITIONS: readonly ScheduleDefinition[] = [
@@ -61,6 +62,16 @@ export const SCHEDULE_DEFINITIONS: readonly ScheduleDefinition[] = [
     cron: DEBT_REMINDER_CRON,
     queue: JobQueue.NOTIFICATIONS,
     jobName: JobName.DEBT_REMINDER,
+    payload: {},
+  },
+  {
+    name: 'overdue-invoice-sweep',
+    label: 'Quét hóa đơn quá hạn',
+    description:
+      'Tìm hóa đơn bán quá hạn thanh toán (theo dueDate và số còn lại sau phân bổ), tạo thông báo cho admin và phát webhook invoice.overdue.',
+    cron: OVERDUE_INVOICE_SWEEP_CRON,
+    queue: JobQueue.NOTIFICATIONS,
+    jobName: JobName.OVERDUE_INVOICE_SWEEP,
     payload: {},
   },
   {

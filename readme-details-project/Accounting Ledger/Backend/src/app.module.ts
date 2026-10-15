@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
 
+import { AccountDefaultsModule } from './account-defaults/account-defaults.module.js';
 import { AccountsModule } from './accounts/accounts.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
@@ -22,6 +23,7 @@ import { JobsModule } from './jobs/jobs.module.js';
 import { JournalsModule } from './journals/journals.module.js';
 import { LedgerModule } from './ledger/ledger.module.js';
 import { PartiesModule } from './parties/parties.module.js';
+import { PaymentsModule } from './payments/payments.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -71,11 +73,15 @@ import { UsersModule } from './users/users.module.js';
     CommonModule,
     AuthModule,
     UsersModule,
+    // Mục 10.A — luật mặc định tài khoản cho dòng hóa đơn bán/mua.
+    AccountDefaultsModule,
     AccountsModule,
     // Mục 10.0 — đối tượng (khách hàng / nhà cung cấp) cho sổ cái phụ.
     PartiesModule,
     SalesInvoicesModule,
     VendorBillsModule,
+    // Mục 10.A — phiếu thu/chi + phân bổ thanh toán một phần.
+    PaymentsModule,
     // Mục 10.0 — phân bổ thanh toán giữa chứng từ đích và nguồn.
     AllocationsModule,
     LedgerModule,

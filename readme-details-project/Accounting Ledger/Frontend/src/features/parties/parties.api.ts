@@ -1,1 +1,50 @@
-import { api } from '@/lib/api'\nimport type {\n  CreatePartyPayload,\n  Party,\n  PartyFilters,\n  PartyUsage,\n  UpdatePartyPayload,\n} from '@/types/api'\n\nfunction cleanParams(filters: PartyFilters): Record<string, string> {\n  const params: Record<string, string> = {}\n  if (filters.type) params.type = filters.type\n  if (filters.isActive !== undefined) params.isActive = String(filters.isActive)\n  if (filters.search?.trim()) params.search = filters.search.trim()\n  return params\n}\n\nexport async function listParties(filters: PartyFilters = {}): Promise<Party[]> {\n  const { data } = await api.get<Party[]>('/parties', {\n    params: cleanParams(filters),\n  })\n  return data\n}\n\nexport async function fetchParty(id: string): Promise<Party> {\n  const { data } = await api.get<Party>(`/parties/${id}`)\n  return data\n}\n\nexport async function fetchPartyUsage(id: string): Promise<PartyUsage> {\n  const { data } = await api.get<PartyUsage>(`/parties/${id}/usage`)\n  return data\n}\n\nexport async function createParty(payload: CreatePartyPayload): Promise<Party> {\n  const { data } = await api.post<Party>('/parties', payload)\n  return data\n}\n\nexport async function updateParty(\n  id: string,\n  payload: UpdatePartyPayload,\n): Promise<Party> {\n  const { data } = await api.patch<Party>(`/parties/${id}`, payload)\n  return data\n}\n\nexport async function deleteParty(id: string): Promise<void> {\n  await api.delete(`/parties/${id}`)\n}\n
+import { api } from '@/lib/api'
+import type {
+  CreatePartyPayload,
+  Party,
+  PartyFilters,
+  PartyUsage,
+  UpdatePartyPayload,
+} from '@/types/api'
+
+function cleanParams(filters: PartyFilters): Record<string, string> {
+  const params: Record<string, string> = {}
+  if (filters.type) params.type = filters.type
+  if (filters.isActive !== undefined) params.isActive = String(filters.isActive)
+  if (filters.search?.trim()) params.search = filters.search.trim()
+  return params
+}
+
+export async function listParties(filters: PartyFilters = {}): Promise<Party[]> {
+  const { data } = await api.get<Party[]>('/parties', {
+    params: cleanParams(filters),
+  })
+  return data
+}
+
+export async function fetchParty(id: string): Promise<Party> {
+  const { data } = await api.get<Party>(`/parties/${id}`)
+  return data
+}
+
+export async function fetchPartyUsage(id: string): Promise<PartyUsage> {
+  const { data } = await api.get<PartyUsage>(`/parties/${id}/usage`)
+  return data
+}
+
+export async function createParty(payload: CreatePartyPayload): Promise<Party> {
+  const { data } = await api.post<Party>('/parties', payload)
+  return data
+}
+
+export async function updateParty(
+  id: string,
+  payload: UpdatePartyPayload,
+): Promise<Party> {
+  const { data } = await api.patch<Party>(`/parties/${id}`, payload)
+  return data
+}
+
+export async function deleteParty(id: string): Promise<void> {
+  await api.delete(`/parties/${id}`)
+}

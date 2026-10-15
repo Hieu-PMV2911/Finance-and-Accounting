@@ -63,6 +63,11 @@ export interface DebtReminderPayload extends JobPayloadBase {
   asOfDate?: string;
 }
 
+/** `notifications` · `overdue-invoice-sweep` (mục 10.A) */
+export interface OverdueInvoiceSweepPayload extends JobPayloadBase {
+  asOfDate?: string;
+}
+
 /** `webhooks` · `deliver-webhook` */
 export interface DeliverWebhookPayload extends JobPayloadBase {
   deliveryId: string;

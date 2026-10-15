@@ -18,9 +18,24 @@ const MONEY_MESSAGE =
   'Số tiền phải là chuỗi số (tối đa 15 chữ số nguyên, tối đa 4 chữ số thập phân) — không dùng số thực để tránh sai số';
 
 export class CreateVendorBillLineDto {
-  @ApiProperty({ format: 'uuid', description: 'Tài khoản chi phí/hàng hóa (theo cấu hình/quy tắc kế toán)' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Tài khoản chi phí — CHỈ gửi khi muốn ghi đè luật mặc định (cần quyền admin/poster). Bỏ trống để hệ thống tự chọn theo luật mặc định tài khoản.',
+  })
+  @IsOptional()
   @IsUUID('4', { message: 'accountId không hợp lệ' })
-  accountId: string;
+  accountId?: string;
+
+  @ApiPropertyOptional({
+    example: 'dịch vụ thuê ngoài',
+    description:
+      'Loại hàng hóa/dịch vụ dùng để tra luật mặc định tài khoản (mục 10.A). Bỏ trống ⇒ dùng luật "*".',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64, { message: 'Loại hàng hóa/dịch vụ tối đa 64 ký tự' })
+  category?: string;
 
   @ApiPropertyOptional({ example: 'Mua dịch vụ' })
   @IsOptional()

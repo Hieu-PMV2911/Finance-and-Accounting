@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Eye, Search } from 'lucide-react'
@@ -49,24 +49,22 @@ export function SubLedgerPanel({
   })
   const parties = partiesQuery.data ?? []
 
-  // Auto-select first party if none selected
-  useEffect(() => {
-    if (!partyId && parties.length > 0) {
-      setPartyId(parties[0].id)
-    }
-  }, [parties, partyId])
+  // Tự chọn đối tượng đầu tiên khi chưa chọn: **suy ra ngay lúc render** thay vì
+  // setState trong `useEffect` — vừa tránh cảnh báo "set-state-in-effect", vừa
+  // không phải chạy lại effect mỗi lần `parties` đổi sau khi refetch.
+  const selectedPartyId = partyId || parties[0]?.id || ''
 
   const subLedgerQuery = useQuery({
-    queryKey: ['sub-ledger', scope, partyId, accountId],
+    queryKey: ['sub-ledger', scope, selectedPartyId, accountId],
     queryFn: () =>
       fetchSubLedger({
-        partyId: partyId,
+        partyId: selectedPartyId,
         accountId: accountId || undefined,
         periodId: scope.periodId,
         fromDate: scope.fromDate,
         toDate: scope.toDate,
       }),
-    enabled: Boolean(partyId),
+    enabled: Boolean(selectedPartyId),
   })
 
   const data = subLedgerQuery.data
@@ -158,7 +156,7 @@ export function SubLedgerPanel({
         <div className="flex flex-wrap items-center gap-3 p-4">
           <div className="relative min-w-[220px] flex-1">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-            <Select value={partyId} onValueChange={setPartyId}>
+            <Select value={selectedPartyId} onValueChange={setPartyId}>
               <SelectTrigger className="pl-9">
                 <SelectValue placeholder="Chọn đối tượng" />
               </SelectTrigger>
@@ -240,7 +238,7 @@ export function SubLedgerPanel({
         <div>
           {partiesQuery.isLoading ? (
             <TableLoading />
-          ) : !partyId ? (
+          ) : !selectedPartyId ? (
             <EmptyState message="Vui lòng chọn đối tượng để xem sổ cái phụ." />
           ) : subLedgerQuery.isLoading ? (
             <TableLoading />
@@ -280,7 +278,7 @@ export function SubLedgerPanel({
           <DialogHeader>
             <DialogTitle>Truy vết bút toán</DialogTitle>
           </DialogHeader>
-          {traceId && <TraceJournalView id={traceId} />}
+          {traceId && <TraceJournalView entryId={traceId} />}
         </DialogContent>
       </Dialog>
     </>

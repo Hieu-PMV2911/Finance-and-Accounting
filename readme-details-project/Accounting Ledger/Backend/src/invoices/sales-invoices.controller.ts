@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -17,6 +19,7 @@ import type { AuthUser } from '../common/interfaces/auth-user.interface.js';
 import { CreateSalesInvoiceDto } from './dto/create-sales-invoice.dto.js';
 import { QuerySalesInvoicesDto } from './dto/query-sales-invoices.dto.js';
 import { UpdateSalesInvoiceDto } from './dto/update-sales-invoice.dto.js';
+import { VoidSalesInvoiceDto } from './dto/void-sales-invoice.dto.js';
 import { SalesInvoicesService } from './sales-invoices.service.js';
 
 @ApiTags('Sales Invoices')
@@ -41,7 +44,7 @@ export class SalesInvoicesController {
   @Roles(Role.ADMIN, Role.MAKER)
   @ApiOperation({ summary: 'Tạo hóa đơn bán (nháp)' })
   create(@Body() dto: CreateSalesInvoiceDto, @CurrentUser() user: AuthUser) {
-    return this.invoices.create(dto, user.id);
+    return this.invoices.create(dto, user);
   }
 
   @Patch(':id')
@@ -52,13 +55,41 @@ export class SalesInvoicesController {
     @Body() dto: UpdateSalesInvoiceDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.invoices.update(id, dto, user.id);
+    return this.invoices.update(id, dto, user);
+  }
+
+  @Post(':id/approve')
+  @Roles(Role.ADMIN, Role.CHECKER)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Xác nhận hóa đơn nháp (admin hoặc người duyệt)' })
+  approve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') actorId: string,
+  ) {
+    return this.invoices.approve(id, actorId);
   }
 
   @Post(':id/post')
   @Roles(Role.ADMIN, Role.POSTER)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Ghi sổ hóa đơn bán (tạo bút toán)' })
   post(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.invoices.post(id, user.id);
+  }
+
+  @Post(':id/void')
+  @Roles(Role.ADMIN, Role.POSTER)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Hủy hóa đơn bán (admin hoặc người ghi sổ)',
+    description:
+      'Hóa đơn đã ghi sổ ⇒ sinh bút toán đảo; bút toán gốc không bị sửa. Hóa đơn còn phân bổ thanh toán ⇒ bị từ chối (409).',
+  })
+  voidInvoice(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VoidSalesInvoiceDto,
+    @CurrentUser('id') actorId: string,
+  ) {
+    return this.invoices.voidInvoice(id, dto, actorId);
   }
 }

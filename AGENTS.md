@@ -358,6 +358,7 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 | ------ | ---------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | GET    | `/api/ledger/general-ledger` | đã đăng nhập | bắt buộc `accountId`; phạm vi theo `periodId` **hoặc** `fromDate`+`toDate`; trả số dư đầu → dòng phát sinh (kèm số dư lũy kế) → số dư cuối; `limit`≤2000, `offset` |
 | GET    | `/api/ledger/trial-balance`  | đã đăng nhập | phạm vi theo `periodId` **hoặc** `fromDate`+`toDate`; mọi tài khoản + tổng + cờ `balanced`                                                                         |
+| GET    | `/api/ledger/sub-ledger`     | đã đăng nhập | **bắt buộc `partyId`**; phạm vi theo `periodId` hoặc `fromDate`+`toDate`; có thể thêm `accountId`; cùng khuôn `general-ledger` (dư đầu → phát sinh → dư cuối)     |
 | GET    | `/api/ledger/reconciliation` | đã đăng nhập | bắt buộc `periodId`; so `account_balances` đã lưu với số dư tái lập từ bút toán → `consistent` + `differences[]`                                                   |
 
 **Reports** (`/api/reports`, mục 7 — báo cáo tài chính):
@@ -367,6 +368,9 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 | GET    | `/api/reports/profit-and-loss` | đã đăng nhập | `periodId` hoặc `fromDate`+`toDate`; doanh thu/chi phí/lợi nhuận thuần + biên LN                                   |
 | GET    | `/api/reports/balance-sheet`   | đã đăng nhập | `toDate` = ngày lập báo cáo; TS = NPT + VCSH + LN giữ lại, cờ `balanced`                                           |
 | GET    | `/api/reports/cash-flow`       | đã đăng nhập | phương pháp trực tiếp; 3 nhóm HĐKD/HĐĐT/HĐTC                                                                       |
+| GET    | `/api/reports/receivables-aging` | đã đăng nhập | `asOfDate` (mặc định hôm nay) + `partyId?` + `includeSettled?`; nhóm tuổi theo `dueDate` (≤30/31–60/61–90/>90 + chưa đến hạn + không có hạn); **Σ nhóm = Σ `outstanding`** |
+| GET    | `/api/reports/payables-aging`  | đã đăng nhập | như trên cho hóa đơn mua (`vendor_bills`)                                                                                                                   |
+| GET    | `/api/reports/revenue-by-party` | đã đăng nhập | `periodId` hoặc `fromDate`+`toDate`; doanh thu thuần 511 theo từng đối tượng (dòng không gắn đối tượng không tính)                                         |
 | GET    | `/api/reports/export/:kind`    | đã đăng nhập | `kind` ∈ {`profit-and-loss`, `balance-sheet`, `cash-flow`}; `format` ∈ {`xlsx`, `pdf`}; trả file (`StreamableFile`) |
 
 **Audit** (`/api/audit-logs`, mục 8 — chỉ **admin**):
@@ -375,7 +379,7 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 | ------ | -------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
 | GET    | `/api/audit-logs`                                  | **admin** | lọc `entity`/`entityId`/`actorId`/`action`/`fromDate`/`toDate`/`search`; `limit`≤500, `offset` |
 | GET    | `/api/audit-logs/trace/:entity/:entityId`          | **admin** | lịch sử thay đổi của một bản ghi (cũ → mới)                                                    |
-| GET    | `/api/audit-logs/traceability/journal-entries/:id` | **admin** | truy vết bút toán → dòng → chứng từ nguồn → vết                                                |
+| GET    | `/api/audit-logs/traceability/journal-entries/:id` | **admin** | truy vết bút toán → dòng → chứng từ nguồn (kèm `source: {type, id, code}` + `sourceDocument`) → vết |
 | GET    | `/api/audit-logs/:id`                              | **admin** | chi tiết một vết                                                                               |
 
 > Vết kiểm toán được ghi **tự động** bằng TypeORM entity subscriber (`AuditSubscriber`) trong **cùng  
@@ -398,6 +402,11 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 | POST   | `/api/jobs/integrity-checks`      | **admin**         | chạy 7 kiểm tra bất biến ngay (**201**)                                                         |
 | POST   | `/api/jobs/balance-snapshot`      | **admin, poster** | chốt/đối chiếu số dư một kỳ; `repair=true` mới ghi lại số dư (**201**)                          |
 
+> Lịch định kỳ hiện có **5**: `balance-snapshot` (01:00), `integrity-check` (02:30),
+> `debt-reminder` (08:00 thứ Hai — số dư 131/331 **và** tuổi nợ theo đối tượng),
+> `overdue-invoice-sweep` (09:00 hằng ngày — thông báo `poster`/`admin` + webhook
+> `invoice.overdue`) và `webhook-retry-sweep` (mỗi 5 phút).
+>
 > Mọi lượt chạy ghi vào **`job_runs`**; `jobId` của BullMQ = id dòng này (riêng webhook là id
 > dòng giao) nên trạng thái bền qua restart. Bảng vận hành (`job_runs`, `notifications`,
 > `webhook_deliveries`, `webhook_events`) **không** ghi vết kiểm toán — chúng đã là nhật ký.
@@ -407,6 +416,11 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 | Method | Route                            | Quyền        | Ghi chú                                                        |
 | ------ | -------------------------------- | ------------ | -------------------------------------------------------------- |
 | GET    | `/api/notifications`             | đã đăng nhập | lọc `type`/`status`/`severity`/`search`; lọc theo người nhận + vai trò |
+
+> Phạm vi (`audience`): `all` mọi người · `admin` chỉ quản trị · `poster` **người ghi sổ +
+> quản trị** (dùng cho cảnh báo cần hành động, vd hóa đơn quá hạn) · `targeted` một người.
+> Loại thông báo 10.A: `debt-reminder` (giờ kèm phân tích theo đối tượng + tuổi nợ) và
+> `overdue-invoice` (mỗi ngày, `severity = warning`).
 | GET    | `/api/notifications/unread-count` | đã đăng nhập | số chưa đọc (badge)                                            |
 | POST   | `/api/notifications/read-all`    | đã đăng nhập | đánh dấu đã đọc mọi thông báo nhìn thấy được                    |
 | POST   | `/api/notifications/:id/read`    | đã đăng nhập | đánh dấu một thông báo đã đọc                                   |
@@ -431,6 +445,76 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 > `JOBS_SCHEDULER_ENABLED` (mặc định `true`), `REPORT_STORAGE_DIR` (mặc định `./storage/reports`),
 > `WEBHOOK_INBOUND_SECRET` (bỏ trống = không kiểm tra chữ ký, chỉ dùng khi dev).
 
+**Mục 10 — Mini ERP (chứng từ & công nợ):**
+
+**Parties** (`/api/parties`, mục 10.0 — khách hàng / nhà cung cấp):
+
+| Method | Route                    | Quyền            | Ghi chú                                                          |
+| ------ | ------------------------ | ---------------- | ---------------------------------------------------------------- |
+| GET    | `/api/parties`           | đã đăng nhập     | lọc `type`/`isActive`/`search`                                    |
+| GET    | `/api/parties/:id`       | đã đăng nhập     |                                                                  |
+| GET    | `/api/parties/:id/summary` | đã đăng nhập   | công nợ theo từng tài khoản 131/331, đọc từ `journal_lines`      |
+| GET    | `/api/parties/:id/usage` | đã đăng nhập     | số dòng định khoản đã gắn → `deletable`                           |
+| POST   | `/api/parties`           | **admin, maker** | `code` duy nhất (**201**)                                         |
+| PATCH  | `/api/parties/:id`       | **admin, maker** |                                                                  |
+| DELETE | `/api/parties/:id`       | **admin**        | đã phát sinh bút toán ⇒ **409**; ngừng dùng thay vì xóa (**204**) |
+
+**Account Defaults** (`/api/account-defaults`, mục 10.A — luật mặc định tài khoản):
+
+| Method | Route                       | Quyền        | Ghi chú                                                                        |
+| ------ | --------------------------- | ------------ | ------------------------------------------------------------------------------ |
+| GET    | `/api/account-defaults`     | đã đăng nhập | lọc `scope`/`isActive`/`search`; kèm tài khoản đích                             |
+| GET    | `/api/account-defaults/:id` | đã đăng nhập |                                                                                |
+| POST   | `/api/account-defaults`     | **admin**    | `(scope, category)` duy nhất; đích phải là tài khoản lá đang hoạt động (**201**) |
+| PATCH  | `/api/account-defaults/:id` | **admin**    |                                                                                |
+| DELETE | `/api/account-defaults/:id` | **admin**    | xóa cứng — đây là bảng **cấu hình**, không phải chứng từ đã ghi sổ (**204**)    |
+
+> Giải tài khoản cho một dòng hóa đơn theo thứ tự: (1) tài khoản chỉ định trên dòng —
+> chỉ **admin/poster** mới được ghi đè, (2) luật theo đúng `category`, (3) luật `*`,
+> (4) mặc định hệ thống theo tiền tố mã (`511` doanh thu / `642` chi phí).
+> `tax_codes` (10.C) cấp thông tin thuế, **không** quyết định tài khoản.
+
+**Sales Invoices** (`/api/sales-invoices`, mục 10.A):
+
+| Method | Route                          | Quyền             | Ghi chú                                                                       |
+| ------ | ------------------------------ | ----------------- | ----------------------------------------------------------------------------- |
+| GET    | `/api/sales-invoices`          | đã đăng nhập      | lọc `partyId`/`status`/`invoiceNo`/`fromDate`/`toDate`                        |
+| GET    | `/api/sales-invoices/:id`      | đã đăng nhập      | kèm dòng + khách hàng                                                          |
+| POST   | `/api/sales-invoices`          | **admin, maker**  | dòng có thể bỏ trống `accountId` ⇒ dùng luật mặc định (**201**)               |
+| PATCH  | `/api/sales-invoices/:id`      | **admin, maker**  | chỉ khi chưa ghi sổ                                                            |
+| POST   | `/api/sales-invoices/:id/approve` | **admin, checker** | `draft → approved` (**200**)                                                                 |
+| POST   | `/api/sales-invoices/:id/post` | **admin, poster** | sinh bút toán `source_type = sales_invoice` + phát webhook `sales_invoice.posted`; nguồn đã dùng ⇒ **409** (**200**) |
+| POST   | `/api/sales-invoices/:id/void`  | **admin, poster** | đã ghi sổ ⇒ sinh **bút toán đảo**, hóa đơn → `voided`; còn phân bổ ⇒ **409** (**200**)       |
+
+**Vendor Bills** (`/api/vendor-bills`, mục 10.A) — đối xứng hóa đơn bán (có `approve`/`post`/
+`void`), `post` dùng `source_type = vendor_bill` + webhook `vendor_bill.posted`.
+
+**Payments** (`/api/payments`, mục 10.A — phiếu thu/phiếu chi + phân bổ thanh toán):
+
+| Method | Route                                          | Quyền             | Ghi chú                                                                                        |
+| ------ | ---------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------- |
+| GET    | `/api/payments`                                | đã đăng nhập      | lọc `direction`/`status`/`method`/`partyId`/`fromDate`/`toDate`/`search`                         |
+| GET    | `/api/payments/:id`                            | đã đăng nhập      |                                                                                                |
+| POST   | `/api/payments`                                | **admin, maker**  | `code` duy nhất; có `idempotencyKey` ⇒ gửi lại trả về phiếu cũ (**201**)                         |
+| PATCH  | `/api/payments/:id`                            | **admin, maker**  | chỉ khi chưa ghi sổ                                                                            |
+| POST   | `/api/payments/:id/approve`                    | **admin, checker** | `draft → approved` (**200**)                                                                    |
+| POST   | `/api/payments/:id/post`                       | **admin, poster** | thu: Nợ 111/112 · Có 131; chi: Nợ 331 · Có 111/112; **idempotent** + webhook `payment.posted` (**200**) |
+| POST   | `/api/payments/:id/void`                       | **admin, poster** | đã ghi sổ ⇒ bút toán đảo; còn phân bổ ⇒ **409** (**200**)                                      |
+| GET    | `/api/payments/:id/allocations`                | đã đăng nhập      | danh sách phân bổ kèm số chứng từ đích                                                          |
+| POST   | `/api/payments/:id/allocations`                | **admin, poster** | đặt số tiền phân bổ vào hóa đơn; **idempotent theo cặp**, chặn vượt trần hai bên (**201**)       |
+| DELETE | `/api/payments/:id/allocations/:allocationId`  | **admin, poster** | gỡ phân bổ (**204**)                                                                            |
+
+> Vòng đời chứng từ 10.A y như bút toán: `draft → approved → posted → voided`, chỉ từ `approved`
+mới ghi sổ được. Phân bổ chỉ dùng cho phiếu **đã ghi sổ** (còn `draft` ⇒ **400**) và là lớp
+phân tích công nợ — **không** sinh bút toán mới.
+> ⚠️ **Chưa có API**: sao kê & đối soát (`payment_intents`, `bank_statements`) — thuộc **10.B**.
+
+> **Webhook event** của 10.A: `sales_invoice.posted`, `vendor_bill.posted`, `payment.posted`,
+> `invoice.overdue` (cùng các event cũ `journal.posted`, `journal.reversed`, `period.closed`,
+> `integrity.violation`, `ping`). Sự kiện `*.posted` phát **ngay sau khi ghi sổ** với
+> `resourceRef` = id chứng từ; `invoice.overdue` do cron `overdue-invoice-sweep` (09:00 hằng ngày)
+> phát với `resourceRef = sweep:<ngày>` — chạy lại trong cùng ngày không gửi thêm lần nữa.
+
 **Health** — `GET /api/health` (public).
 
 ---
@@ -452,16 +536,21 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
   **kỳ kế toán** (danh sách + số dư kỳ).  
   ⏳ còn lại: màn hình **sổ cái**, **báo cáo** (Recharts) — API mục 6 & 7 đã sẵn sàng, chưa gắn UI.
 - **Giai đoạn 5**: ✅ **Queue + Schedule (mục 9)** — 4 hàng đợi BullMQ (reports/maintenance/
-  notifications/webhooks) + 4 lịch cron (chốt số dư, kiểm tra bất biến, nhắc công nợ, quét
-  webhook treo), lịch sử `job_runs` có thử lại, thông báo trong hệ thống, webhook có retry +
+  notifications/webhooks) + 5 lịch cron (chốt số dư, kiểm tra bất biến, nhắc công nợ — giờ có
+  phân tích theo đối tượng + tuổi nợ —, quét hóa đơn quá hạn, quét webhook treo), lịch sử
+  `job_runs` có thử lại, thông báo trong hệ thống, webhook có retry +
   xử lý kết quả đến trễ; ✅ audit log (mục 8). ⏳ dead-letter queue, gửi email/SMS.
-- **Giai đoạn 6 (mục 10 — ⏳ chưa làm)**: Mở rộng — **kế hoạch chi tiết ở `EXTENSION_PLAN.md`**.
-  Thứ tự: **10.0** nền chung (party, chứng từ nguồn có cấu trúc `source_type/source_id`, phân bổ,
-  sổ cái phụ theo đối tượng) → **10.A** Mini ERP (hóa đơn, công nợ + tuổi nợ, thanh toán một phần) →
-  **10.B** Payment & Reconciliation (vòng đời thanh toán + timeout ≠ thất bại, sao kê, danh sách lệch) →
+- **Giai đoạn 6 (mục 10)**: Mở rộng — **kế hoạch chi tiết ở `EXTENSION_PLAN.md`**.
+  ✅ **10.0** nền chung: `parties` (+ `summary`, `usage`), chứng từ nguồn có cấu trúc
+  `source_type/source_id` (truy vết trả `source {type, id, code}`), `allocations`,
+  **sổ cái phụ** `GET /api/ledger/sub-ledger`.
+  ✅ **10.A** Mini ERP: hóa đơn bán/mua (`approve`/`post`/`void` + bút toán đảo), phiếu thu/chi
+  + phân bổ, `account-defaults`, báo cáo `receivables-aging` / `payables-aging` /
+  `revenue-by-party`, job `overdue-invoice-sweep` + 4 webhook event mới, `debt-reminder` nâng cấp
+  theo đối tượng. **Trạng thái chi tiết từng hạng mục P0/P1: `MUC-10-TIEP-THEO.md`.**
+  ⏳ **10.B** Payment & Reconciliation (vòng đời thanh toán + timeout ≠ thất bại, sao kê, danh sách lệch) →
   **10.C** đa tiền tệ, thuế, đa công ty. Mọi chứng từ mục 10 ghi sổ **qua `JournalsService`**
   (không có bộ máy ghi sổ thứ hai) và **một chứng từ nguồn chỉ sinh một bút toán gốc**.
-  Bề mặt API của mục 10 (dự kiến) ở `EXTENSION_PLAN.md` mục 6 — **chưa** đưa vào bảng mục 8 cho tới khi code xong.
 
 ---
 

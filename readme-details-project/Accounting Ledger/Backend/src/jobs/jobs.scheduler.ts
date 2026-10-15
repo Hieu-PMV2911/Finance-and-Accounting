@@ -5,6 +5,7 @@ import {
   BALANCE_SNAPSHOT_CRON,
   DEBT_REMINDER_CRON,
   INTEGRITY_CHECK_CRON,
+  OVERDUE_INVOICE_SWEEP_CRON,
   SchedulesService,
   WEBHOOK_SWEEP_CRON,
 } from './schedules.service.js';
@@ -42,6 +43,12 @@ export class JobsScheduler {
   @Cron(DEBT_REMINDER_CRON)
   async scheduleDebtReminder(): Promise<void> {
     await this.schedules.runScheduled('debt-reminder');
+  }
+
+  /** 09:00 hằng ngày — quét hóa đơn bán quá hạn (mục 10.A). */
+  @Cron(OVERDUE_INVOICE_SWEEP_CRON)
+  async scheduleOverdueInvoiceSweep(): Promise<void> {
+    await this.schedules.runScheduled('overdue-invoice-sweep');
   }
 
   /** Mỗi 5 phút — đẩy lại webhook còn treo do mất job. */

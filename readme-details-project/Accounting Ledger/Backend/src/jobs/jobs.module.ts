@@ -17,6 +17,7 @@ import { JobsController } from './jobs.controller.js';
 import { JobsScheduler } from './jobs.scheduler.js';
 import { NotificationsController } from './notifications.controller.js';
 import { NotificationsService } from './notifications.service.js';
+import { OverdueInvoiceSweepService } from './overdue-invoice-sweep.service.js';
 import { MaintenanceProcessor } from './processors/maintenance.processor.js';
 import { NotificationsProcessor } from './processors/notifications.processor.js';
 import { ReportsProcessor } from './processors/reports.processor.js';
@@ -36,7 +37,7 @@ import { WebhooksService } from './webhooks.service.js';
  * |---|---|---|
  * | `reports` | sinh báo cáo nặng (Excel/PDF) | 2 |
  * | `maintenance` | chốt số dư, kiểm tra bất biến, quét webhook treo | 3 |
- * | `notifications` | ghi thông báo, nhắc công nợ | 5 |
+ * | `notifications` | ghi thông báo, nhắc công nợ, quét hóa đơn quá hạn | 5 |
  * | `webhooks` | giao webhook ra ngoài | 5 |
  *
  * `BullModule.registerQueue` chỉ khai báo hàng đợi; kết nối Redis lấy từ
@@ -75,6 +76,7 @@ import { WebhooksService } from './webhooks.service.js';
     IntegrityService,
     BalanceSnapshotService,
     DebtReminderService,
+    OverdueInvoiceSweepService,
     NotificationsService,
     WebhooksService,
 

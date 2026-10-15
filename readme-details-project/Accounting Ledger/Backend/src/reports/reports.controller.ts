@@ -16,7 +16,9 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 
+import { AgingReportService } from './aging-report.service.js';
 import { ExportReportDto } from './dto/export-report.dto.js';
+import { QueryAgingDto } from './dto/query-aging.dto.js';
 import { QueryReportDto } from './dto/query-report.dto.js';
 import { ReportKind } from './enums/report.enum.js';
 import { ReportExportService } from './report-export.service.js';
@@ -29,6 +31,7 @@ export class ReportsController {
   constructor(
     private readonly reports: ReportsService,
     private readonly exporter: ReportExportService,
+    private readonly aging: AgingReportService,
   ) {}
 
   @Get('profit-and-loss')
@@ -54,6 +57,34 @@ export class ReportsController {
   @ApiOkResponse({ description: 'Dòng tiền vào/ra theo 3 nhóm hoạt động' })
   cashFlow(@Query() query: QueryReportDto) {
     return this.reports.cashFlow(query);
+  }
+
+  @Get('receivables-aging')
+  @ApiOperation({
+    summary: 'Tuổi nợ phải thu theo khách hàng (mục 10.A)',
+    description:
+      'Số còn lại là dẫn xuất `total − Σ phân bổ`. Σ các nhóm luôn bằng tổng số còn lại.',
+  })
+  @ApiOkResponse({ description: 'Tuổi nợ phải thu theo nhóm và theo đối tượng' })
+  receivablesAging(@Query() query: QueryAgingDto) {
+    return this.aging.receivablesAging(query);
+  }
+
+  @Get('payables-aging')
+  @ApiOperation({ summary: 'Tuổi nợ phải trả theo nhà cung cấp (mục 10.A)' })
+  @ApiOkResponse({ description: 'Tuổi nợ phải trả theo nhóm và theo đối tượng' })
+  payablesAging(@Query() query: QueryAgingDto) {
+    return this.aging.payablesAging(query);
+  }
+
+  @Get('revenue-by-party')
+  @ApiOperation({
+    summary: 'Doanh thu theo khách hàng trong kỳ (mục 10.A)',
+    description: 'Đọc thẳng từ journal_lines của các tài khoản 511*, đã trừ bút toán đảo.',
+  })
+  @ApiOkResponse({ description: 'Doanh thu thuần theo từng khách hàng' })
+  revenueByParty(@Query() query: QueryReportDto) {
+    return this.aging.revenueByParty(query);
   }
 
   @Get('export/:kind')

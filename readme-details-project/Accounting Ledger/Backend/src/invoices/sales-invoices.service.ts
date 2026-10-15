@@ -1,33 +1,49 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
+import { AccountDefaultsService } from '../account-defaults/account-defaults.service.js';
 import { AccountsService } from '../accounts/accounts.service.js';
+import { AllocationsService } from '../allocations/allocations.service.js';
 import type { Account } from '../accounts/entities/account.entity.js';
+import { AccountDefaultScope } from '../common/enums/account-default-scope.enum.js';
+import { AllocationTargetType } from '../common/enums/allocation-target-type.enum.js';
 import {
   INVOICE_STATUS_LABELS,
   InvoiceStatus,
   isInvoiceImmutable,
 } from '../common/enums/invoice-status.enum.js';
+import type { AuthUser } from '../common/interfaces/auth-user.interface.js';
 import { SourceType } from '../common/enums/source-type.enum.js';
+import { JobTrigger } from '../jobs/enums/job.enum.js';
 import { moneyToString, sumMoney, toMoney } from '../common/utils/money.util.js';
 import { isPartyAccount, partyAccountMessage } from '../common/utils/party-account.util.js';
 import { FiscalPeriodsService } from '../fiscal-periods/fiscal-periods.service.js';
 import type { CreateJournalLineDto } from '../journals/dto/create-journal-line.dto.js';
 import { JournalsService } from '../journals/journals.service.js';
+import { WebhookEventType } from '../jobs/enums/webhook.enum.js';
+import { WebhooksService } from '../jobs/webhooks.service.js';
 import { PartiesService } from '../parties/parties.service.js';
-import type { CreateSalesInvoiceDto } from './dto/create-sales-invoice.dto.js';
+import type {
+  CreateSalesInvoiceDto,
+  CreateSalesInvoiceLineDto,
+} from './dto/create-sales-invoice.dto.js';
 import type { QuerySalesInvoicesDto } from './dto/query-sales-invoices.dto.js';
 import type { UpdateSalesInvoiceDto } from './dto/update-sales-invoice.dto.js';
+import type { VoidSalesInvoiceDto } from './dto/void-sales-invoice.dto.js';
 import { SalesInvoice, SalesInvoiceLine } from './entities/sales-invoice.entity.js';
 
 @Injectable()
 export class SalesInvoicesService {
+  private readonly logger = new Logger(SalesInvoicesService.name);
+
   constructor(
     @InjectRepository(SalesInvoice)
     private readonly invoices: Repository<SalesInvoice>,
@@ -35,8 +51,11 @@ export class SalesInvoicesService {
     private readonly lines: Repository<SalesInvoiceLine>,
     private readonly parties: PartiesService,
     private readonly accounts: AccountsService,
+    private readonly accountDefaults: AccountDefaultsService,
+    private readonly allocations: AllocationsService,
     private readonly periods: FiscalPeriodsService,
     private readonly journals: JournalsService,
+    private readonly webhooks: WebhooksService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -78,10 +97,9 @@ export class SalesInvoicesService {
     return invoice;
   }
 
-  async create(dto: CreateSalesInvoiceDto, actorId: string): Promise<SalesInvoice> {
+  async create(dto: CreateSalesInvoiceDto, actor: AuthUser): Promise<SalesInvoice> {
     await this.parties.resolveActive(dto.partyId);
 
-    // Basic validation
     const subtotal = toMoney(dto.subtotal);
     const tax = toMoney(dto.taxAmount ?? '0');
     const total = toMoney(dto.total);
@@ -93,14 +111,9 @@ export class SalesInvoicesService {
       throw new BadRequestException('Subtotal + thuế phải bằng tổng tiền');
     }
 
-    // Validate each line account is postable
-    for (let i = 0; i < dto.lines.length; i++) {
-      const line = dto.lines[i];
-      const acc = await this.accounts.getPostable(line.accountId);
-      if (!acc.isActive) {
-        throw new BadRequestException(`Tài khoản ${acc.code} đã ngừng sử dụng`);
-      }
-    }
+    // Mục 10.A — người lập thường **không** chọn tài khoản doanh thu; hệ thống giải
+    // theo luật mặc định. Kết quả đã là tài khoản lá đang hoạt động.
+    const lineAccounts = await this.resolveLineAccounts(dto.lines, actor);
 
     const invoice = this.invoices.create({
       invoiceNo: dto.invoiceNo.trim(),
@@ -115,7 +128,7 @@ export class SalesInvoicesService {
       total: moneyToString(total),
       receivableAccountId: dto.receivableAccountId ?? null,
       journalEntryId: null,
-      createdBy: actorId,
+      createdBy: actor.id,
       approvedBy: null,
       postedBy: null,
       postedAt: null,
@@ -127,7 +140,7 @@ export class SalesInvoicesService {
       return this.lines.create({
         invoiceId: saved.id,
         lineNo: idx + 1,
-        accountId: l.accountId,
+        accountId: lineAccounts[idx].id,
         description: l.description ?? null,
         quantity: moneyToString(l.quantity ?? '1.0000'),
         unitPrice: moneyToString(l.unitPrice ?? l.amount),
@@ -139,9 +152,11 @@ export class SalesInvoicesService {
     return this.findById(saved.id);
   }
 
-  // `_actorId` chưa dùng: vết thay đổi do `AuditSubscriber` ghi tự động theo ngữ cảnh
-  // request. Giữ tham số để chữ ký khớp controller và P1.2 (duyệt/ghi sổ) dùng lại.
-  async update(id: string, dto: UpdateSalesInvoiceDto, _actorId: string): Promise<SalesInvoice> {
+  async update(
+    id: string,
+    dto: UpdateSalesInvoiceDto,
+    actor: AuthUser,
+  ): Promise<SalesInvoice> {
     const invoice = await this.findById(id);
     if (isInvoiceImmutable(invoice.status)) {
       throw new ForbiddenException('Không thể sửa hóa đơn đã ghi sổ hoặc đã hủy');
@@ -163,12 +178,14 @@ export class SalesInvoicesService {
     });
 
     if (dto.lines) {
+      // Thay toàn bộ dòng ⇒ phải giải lại tài khoản cho từng dòng mới.
+      const lineAccounts = await this.resolveLineAccounts(dto.lines, actor);
       await this.lines.delete({ invoiceId: invoice.id });
       const lines = dto.lines.map((l, idx) => {
         return this.lines.create({
           invoiceId: invoice.id,
           lineNo: idx + 1,
-          accountId: l.accountId,
+          accountId: lineAccounts[idx].id,
           description: l.description ?? null,
           quantity: moneyToString(l.quantity ?? '1.0000'),
           unitPrice: moneyToString(l.unitPrice ?? l.amount),
@@ -183,6 +200,79 @@ export class SalesInvoicesService {
     }
 
     return this.invoices.save(invoice);
+  }
+
+  /**
+   * Hủy hóa đơn.
+   *
+   * - Chưa ghi sổ (`draft` / `approved`): chỉ đổi trạng thái — chưa có bút toán nào.
+   * - Đã ghi sổ (`posted`): **không** sửa bút toán cũ (bất biến #2) mà sinh bút toán
+   *   **đảo** qua `JournalsService.reverse`; bút toán gốc chuyển `reversed`, hóa đơn
+   *   giữ nguyên số tiền và chuyển `voided`.
+   *
+   * Chứng từ điều chỉnh ở đây là **bút toán đảo** (đúng nghiệp vụ và giữ sổ cái cân
+   * bằng). Một loại chứng từ `credit_note` riêng chưa được dựng — xem `MUC-10-TIEP-THEO.md`.
+   */
+  async voidInvoice(
+    id: string,
+    dto: VoidSalesInvoiceDto,
+    actorId: string,
+  ): Promise<SalesInvoice> {
+    const invoice = await this.findById(id);
+
+    if (invoice.status === InvoiceStatus.VOIDED) {
+      throw new BadRequestException('Hóa đơn đã bị hủy');
+    }
+
+    // Đã phân bổ thanh toán ⇒ phải gỡ phân bổ trước; nếu không, công nợ sẽ trỏ vào
+    // một chứng từ không còn giá trị.
+    const allocated = await this.allocations.allocatedToTarget(
+      AllocationTargetType.SALES_INVOICE,
+      invoice.id,
+    );
+    if (allocated.greaterThan(0)) {
+      throw new ConflictException(
+        `Hóa đơn đã được phân bổ ${moneyToString(allocated)} — hãy gỡ phân bổ trước khi hủy`,
+      );
+    }
+
+    if (invoice.status === InvoiceStatus.POSTED) {
+      if (!invoice.journalEntryId) {
+        throw new ConflictException(
+          'Hóa đơn đã ghi sổ nhưng thiếu bút toán gốc — dữ liệu bất thường, cần kiểm tra thủ công',
+        );
+      }
+      // Đảo bút toán **và** chuyển hóa đơn sang `voided` trong cùng transaction:
+      // nếu tách hai bước thì chạy lại sau sự cố sẽ gặp bút toán gốc đã `reversed`.
+      const reversal = await this.journals.reverseDocument(
+        invoice.journalEntryId,
+        { reason: dto.reason.trim(), date: dto.date },
+        actorId,
+        async (manager, created) => {
+          await manager.update(SalesInvoice, invoice.id, {
+            status: InvoiceStatus.VOIDED,
+            voidedBy: actorId,
+            voidedAt: new Date(),
+            voidReason: dto.reason.trim(),
+            reversalJournalEntryId: created.id,
+          });
+        },
+      );
+      invoice.reversalJournalEntryId = reversal.id;
+      invoice.status = InvoiceStatus.VOIDED;
+      invoice.voidedBy = actorId;
+      invoice.voidedAt = new Date();
+      invoice.voidReason = dto.reason.trim();
+      return this.findById(id);
+    }
+
+    invoice.status = InvoiceStatus.VOIDED;
+    invoice.voidedBy = actorId;
+    invoice.voidedAt = new Date();
+    invoice.voidReason = dto.reason.trim();
+    await this.invoices.save(invoice);
+
+    return this.findById(id);
   }
 
   async post(id: string, actorId: string): Promise<SalesInvoice> {
@@ -204,7 +294,10 @@ export class SalesInvoicesService {
     // nếu chưa khai thì lấy tài khoản lá 131* đang hoạt động.
     const receivableAccount = invoice.receivableAccountId
       ? await this.accounts.getPostable(invoice.receivableAccountId)
-      : await this.requireControlAccount('131', 'phải thu khách hàng (131*)');
+      : await this.accounts.requirePostableByCodePrefix(
+          '131',
+          'phải thu khách hàng (131*)',
+        );
     if (!isPartyAccount(receivableAccount.code)) {
       throw new BadRequestException(partyAccountMessage(receivableAccount.code));
     }
@@ -237,7 +330,7 @@ export class SalesInvoicesService {
       });
     }
 
-    const entry = await this.journals.create(
+    const posted = await this.journals.postDocument(
       {
         date: invoice.date,
         description: invoice.description ?? `Hóa đơn bán ${invoice.invoiceNo}`,
@@ -247,10 +340,19 @@ export class SalesInvoicesService {
         lines: journalLines,
       },
       actorId,
+      // Cập nhật hóa đơn **trong cùng transaction** với bút toán (P1.2): nếu ghi sổ
+      // thất bại giữa chừng thì mọi thứ rollback — không để hóa đơn kẹt ở trạng thái
+      // "bút toán đã ghi nhưng hóa đơn vẫn approved".
+      async (manager, entry) => {
+        await manager.update(SalesInvoice, invoice.id, {
+          status: InvoiceStatus.POSTED,
+          journalEntryId: entry.id,
+          postedBy: actorId,
+          postedAt: new Date(),
+          receivableAccountId: receivableAccount.id,
+        });
+      },
     );
-
-    // Post it
-    const posted = await this.journals.post(entry.id, actorId);
 
     invoice.status = InvoiceStatus.POSTED;
     invoice.journalEntryId = posted.id;
@@ -258,22 +360,75 @@ export class SalesInvoicesService {
     invoice.postedAt = new Date();
     invoice.receivableAccountId = receivableAccount.id;
 
-    await this.invoices.save(invoice);
+    // Mục 10.A — phát sự kiện cho hệ thống ngoài. `resourceRef` = id hóa đơn nên
+    // chống giao trùng theo `(sự kiện, hóa đơn, endpoint)`; hóa đơn đã ghi sổ là
+    // bất biến (không post lại được) nên không có nguy cơ phát hai lần.
+    // Lỗi giao webhook **không** được làm hỏng kết quả ghi sổ đã commit — đã ghi thì
+    // phải trả 200; muốn bù sự kiện thì gọi `POST /api/webhooks/events`.
+    try {
+      await this.webhooks.dispatch({
+        eventType: WebhookEventType.SALES_INVOICE_POSTED,
+        resourceRef: invoice.id,
+        data: {
+          invoiceNo: invoice.invoiceNo,
+          partyId: invoice.partyId,
+          date: invoice.date,
+          dueDate: invoice.dueDate,
+          total: invoice.total,
+          currency: invoice.currency,
+          journalEntryId: posted.id,
+        },
+        trigger: JobTrigger.SYSTEM,
+        actor: null,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Không xếp được webhook sales_invoice.posted cho hóa đơn ${invoice.invoiceNo}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
     return invoice;
   }
 
-  /**
-   * Lấy tài khoản công nợ để ghi sổ theo tiền tố mã.
-   * Chặn khi chưa cấu hình tài khoản (không im lặng bỏ qua) và chỉ nhận tài khoản
-   * **lá, đang hoạt động** qua `AccountsService.getPostable`.
-   */
-  private async requireControlAccount(prefix: string, label: string): Promise<Account> {
-    const found = await this.accounts.findOneByCodePattern(prefix);
-    if (!found) {
+  /** `checker` xác nhận hóa đơn nháp → sẵn sàng ghi sổ. */
+  async approve(id: string, actorId: string): Promise<SalesInvoice> {
+    const invoice = await this.findById(id);
+
+    if (invoice.status !== InvoiceStatus.DRAFT) {
       throw new BadRequestException(
-        `Không tìm thấy tài khoản ${label} để ghi sổ chứng từ`,
+        `Chỉ xác nhận được hóa đơn nháp (hóa đơn đang ở trạng thái "${INVOICE_STATUS_LABELS[invoice.status]}")`,
       );
     }
-    return this.accounts.getPostable(found.id);
+
+    invoice.status = InvoiceStatus.APPROVED;
+    invoice.approvedBy = actorId;
+    invoice.approvedAt = new Date();
+    await this.invoices.save(invoice);
+
+    return this.findById(id);
+  }
+
+  /**
+   * Giải tài khoản doanh thu cho toàn bộ dòng hóa đơn (mục 10.A).
+   * Tách riêng để `create` và `update` dùng **đúng một** quy tắc.
+   */
+  private resolveLineAccounts(
+    lines: readonly CreateSalesInvoiceLineDto[],
+    actor: AuthUser,
+  ): Promise<Account[]> {
+    return Promise.all(
+      lines.map((line) =>
+        this.accountDefaults.resolveLineAccount(
+          {
+            scope: AccountDefaultScope.SALES,
+            category: line.category,
+            overrideAccountId: line.accountId,
+          },
+          actor,
+        ),
+      ),
+    );
   }
 }

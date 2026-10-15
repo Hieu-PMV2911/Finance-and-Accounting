@@ -24,7 +24,12 @@ import {
  * Phạm vi hiển thị:
  * - `all`      : mọi người dùng thấy.
  * - `admin`    : chỉ `admin` thấy (cảnh báo bất biến, sự cố hệ thống).
+ * - `poster`   : `poster` **và** `admin` thấy (cảnh báo cần hành động ghi sổ).
  * - `targeted` : chỉ `targetUserId` thấy (báo cáo của chính người yêu cầu).
+ *
+ * ⚠️ `audience` là **enum của Postgres**. Thêm giá trị mới (như `poster` ở mục
+ * 10.A) thì môi trường đang chạy `synchronize: false` phải tự chạy
+ * `ALTER TYPE notification_audience_enum ADD VALUE 'poster';` trước khi deploy.
  */
 @Entity('notifications')
 @Index(['status', 'createdAt'])

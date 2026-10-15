@@ -1,1 +1,17 @@
-import { api } from '@/lib/api'\nimport { scopeParams } from '@/lib/scope'\nimport type { SubLedger, SubLedgerQuery } from '@/types/api'\n\nexport async function fetchSubLedger(query: SubLedgerQuery): Promise<SubLedger> {\n  const { partyId, accountId, limit, offset, ...scope } = query\n  const params: Record<string, string> = {\n    partyId,\n    ...scopeParams(scope),\n  }\n  if (accountId) params.accountId = accountId\n  if (limit !== undefined) params.limit = String(limit)\n  if (offset !== undefined) params.offset = String(offset)\n\n  const { data } = await api.get<SubLedger>('/ledger/sub-ledger', { params })\n  return data\n}\n
+import { api } from '@/lib/api'
+import { scopeParams } from '@/lib/scope'
+import type { SubLedger, SubLedgerQuery } from '@/types/api'
+
+export async function fetchSubLedger(query: SubLedgerQuery): Promise<SubLedger> {
+  const { partyId, accountId, limit, offset, ...scope } = query
+  const params: Record<string, string> = {
+    partyId,
+    ...scopeParams(scope),
+  }
+  if (accountId) params.accountId = accountId
+  if (limit !== undefined) params.limit = String(limit)
+  if (offset !== undefined) params.offset = String(offset)
+
+  const { data } = await api.get<SubLedger>('/ledger/sub-ledger', { params })
+  return data
+}

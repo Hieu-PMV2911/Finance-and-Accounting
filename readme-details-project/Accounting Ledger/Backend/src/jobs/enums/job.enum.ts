@@ -37,6 +37,8 @@ export enum JobName {
   SEND_NOTIFICATION = 'send-notification',
   /** `notifications`: nhắc công nợ phải thu / phải trả. */
   DEBT_REMINDER = 'debt-reminder',
+  /** Quét hóa đơn bán quá hạn (mục 10.A): thông báo + webhook `invoice.overdue`. */
+  OVERDUE_INVOICE_SWEEP = 'overdue-invoice-sweep',
   /** `webhooks`: giao một webhook ra endpoint đã đăng ký. */
   DELIVER_WEBHOOK = 'deliver-webhook',
   /** `maintenance`: quét các lần giao webhook bị treo (mất job) rồi đẩy lại. */

@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 
+import { SourceType } from '../common/enums/source-type.enum.js';
 import { JournalsService } from '../journals/journals.service.js';
 import type { QueryAuditLogsDto } from './dto/query-audit-logs.dto.js';
 import { AuditLog } from './entities/audit-log.entity.js';
@@ -9,6 +10,21 @@ import type { JournalTraceability } from './interfaces/traceability.interface.js
 
 /** Tên bảng của bút toán — dùng làm khóa truy vết. */
 const JOURNAL_ENTITY = 'journal_entries';
+
+/**
+ * Câu lấy **số chứng từ** theo loại nguồn (mục 10.0).
+ *
+ * Bảng/cột nằm trong hằng số **theo enum**, không bao giờ lấy từ input ⇒ không có
+ * đường chèn SQL. Loại chưa có bảng tra (mục 10.B) không nằm trong bảng này và trả
+ * `null` thay vì đoán bừa.
+ */
+const SOURCE_CODE_SQL: Partial<Record<SourceType, string>> = {
+  [SourceType.SALES_INVOICE]:
+    'SELECT invoice_no AS code FROM sales_invoices WHERE id = $1',
+  [SourceType.VENDOR_BILL]:
+    'SELECT bill_no AS code FROM vendor_bills WHERE id = $1',
+  [SourceType.PAYMENT]: 'SELECT code FROM payments WHERE id = $1',
+};
 
 /** Ngày kế tiếp (`YYYY-MM-DD`) để lọc `created_at < ngày mai` (bao trùm cả ngày `toDate`). */
 function nextDay(isoDate: string): string {
@@ -31,6 +47,8 @@ export class AuditService {
     @InjectRepository(AuditLog)
     private readonly logs: Repository<AuditLog>,
     private readonly journals: JournalsService,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   /** Danh sách vết kiểm toán, mới nhất trước. */
@@ -131,9 +149,28 @@ export class AuditService {
       sourceDocument: entry.reference,
       // Mục 10.0 — truy vết có cấu trúc: bút toán nhập tay thì không có chứng từ nguồn.
       source: entry.sourceId
-        ? { type: entry.sourceType, id: entry.sourceId }
+        ? {
+            type: entry.sourceType,
+            id: entry.sourceId,
+            code: await this.resolveSourceCode(
+              entry.sourceType,
+              entry.sourceId,
+            ),
+          }
         : null,
       history,
     };
+  }
+
+  /** Số chứng từ của bản ghi nguồn; `null` khi loại nguồn chưa có bảng tra. */
+  private async resolveSourceCode(
+    type: SourceType,
+    id: string,
+  ): Promise<string | null> {
+    const sql = SOURCE_CODE_SQL[type];
+    if (!sql) return null;
+
+    const rows = await this.dataSource.query<{ code: string }[]>(sql, [id]);
+    return rows[0]?.code ?? null;
   }
 }
