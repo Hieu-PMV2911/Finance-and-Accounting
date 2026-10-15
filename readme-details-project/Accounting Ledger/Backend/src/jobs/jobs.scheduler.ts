@@ -6,6 +6,8 @@ import {
   DEBT_REMINDER_CRON,
   INTEGRITY_CHECK_CRON,
   OVERDUE_INVOICE_SWEEP_CRON,
+  PAYMENT_STATUS_POLL_CRON,
+  RECONCILIATION_CATCHUP_CRON,
   SchedulesService,
   WEBHOOK_SWEEP_CRON,
 } from './schedules.service.js';
@@ -55,5 +57,22 @@ export class JobsScheduler {
   @Cron(WEBHOOK_SWEEP_CRON)
   async scheduleWebhookSweep(): Promise<void> {
     await this.schedules.runScheduled('webhook-retry-sweep');
+  }
+
+  /**
+   * Mỗi 2 phút — tra cứu lại trạng thái thanh toán (mục 10.B).
+   *
+   * Đây là cơ chế trả lời trực tiếp yêu cầu gốc: *timeout không phải thất bại*.
+   * Intent nằm ở `unknown` sẽ được tra cứu lại cho tới khi có bằng chứng kết luận.
+   */
+  @Cron(PAYMENT_STATUS_POLL_CRON)
+  async schedulePaymentStatusPoll(): Promise<void> {
+    await this.schedules.runScheduled('payment-status-poll');
+  }
+
+  /** 03:00 hằng ngày — khớp lại sao kê còn mở (mục 10.B). */
+  @Cron(RECONCILIATION_CATCHUP_CRON)
+  async scheduleReconciliationCatchup(): Promise<void> {
+    await this.schedules.runScheduled('reconciliation-catchup');
   }
 }

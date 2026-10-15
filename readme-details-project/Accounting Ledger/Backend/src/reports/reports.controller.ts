@@ -23,6 +23,7 @@ import { QueryReportDto } from './dto/query-report.dto.js';
 import { ReportKind } from './enums/report.enum.js';
 import { ReportExportService } from './report-export.service.js';
 import { ReportsService } from './reports.service.js';
+import { VatReportService } from './vat-report.service.js';
 
 @ApiTags('Reports')
 @ApiBearerAuth()
@@ -32,6 +33,7 @@ export class ReportsController {
     private readonly reports: ReportsService,
     private readonly exporter: ReportExportService,
     private readonly aging: AgingReportService,
+    private readonly vat: VatReportService,
   ) {}
 
   @Get('profit-and-loss')
@@ -87,10 +89,22 @@ export class ReportsController {
     return this.aging.revenueByParty(query);
   }
 
+  @Get('vat')
+  @ApiOperation({
+    summary: 'Bảng kê thuế GTGT đầu vào / đầu ra theo kỳ (mục 10.C.2)',
+    description:
+      'Chỉ gồm chứng từ đã ghi sổ. "payable" = thuế đầu ra − đầu vào; số âm nghĩa là còn được khấu trừ.',
+  })
+  @ApiOkResponse({ description: 'Bảng kê hóa đơn đầu ra/đầu vào + thuế GTGT phải nộp' })
+  vatReport(@Query() query: QueryReportDto) {
+    return this.vat.vatReport(query);
+  }
+
   @Get('export/:kind')
   @ApiOperation({
     summary: 'Xuất báo cáo ra Excel hoặc PDF',
-    description: 'kind: profit-and-loss | balance-sheet | cash-flow. format: xlsx | pdf.',
+    description:
+      'kind: profit-and-loss | balance-sheet | cash-flow | vat-input-output. format: xlsx | pdf.',
   })
   @ApiProduces(
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

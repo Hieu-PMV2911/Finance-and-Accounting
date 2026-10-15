@@ -72,3 +72,33 @@ export interface OverdueInvoiceSweepPayload extends JobPayloadBase {
 export interface DeliverWebhookPayload extends JobPayloadBase {
   deliveryId: string;
 }
+
+/**
+ * `payments` · `payment-status-poll` (mục 10.B).
+ *
+ * Không truyền `intentId` ⇒ job quét **mọi** intent chưa kết luận (chạy theo cron).
+ * Truyền `intentId` ⇒ chỉ tra cứu một intent (dùng khi người dùng bấm "tra cứu lại").
+ */
+export interface PaymentStatusPollPayload extends JobPayloadBase {
+  intentId?: string;
+}
+
+/** `statements` · `import-statement` (mục 10.B) — nạp & chuẩn hóa một file sao kê. */
+export interface ImportStatementPayload extends JobPayloadBase {
+  statementId: string;
+}
+
+/** `statements` · `reconciliation-catchup` (mục 10.B) — khớp lại toàn bộ sao kê còn mở. */
+export interface ReconciliationCatchupPayload extends JobPayloadBase {
+  asOfDate?: string;
+}
+
+/** `dead-letter` · `dead-letter-archive` — lưu vết job đã hết số lần thử. */
+export interface DeadLetterArchivePayload extends JobPayloadBase {
+  sourceQueue: string;
+  sourceJobName: string;
+  sourceRunId: string | null;
+  error: string;
+  attempts: number;
+  originalPayload?: Record<string, unknown> | null;
+}

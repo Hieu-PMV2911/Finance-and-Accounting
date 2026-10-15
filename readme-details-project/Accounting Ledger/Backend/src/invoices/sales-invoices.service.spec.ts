@@ -56,6 +56,9 @@ function invoice(overrides: Partial<SalesInvoice> = {}): SalesInvoice {
         quantity: '1.0000',
         unitPrice: '1000000.0000',
         amount: '1000000.0000',
+        taxCodeId: null,
+        taxRate: '0.0000',
+        taxAmount: '0.0000',
       },
     ],
     party: undefined,
@@ -74,6 +77,16 @@ function createService(current: SalesInvoice): {
   };
   webhooks: { dispatch: ReturnType<typeof vi.fn> };
   allocations: { allocatedToTarget: ReturnType<typeof vi.fn> };
+  taxes: {
+    resolveDocumentTaxes: ReturnType<typeof vi.fn>;
+    groupVatByAccount: ReturnType<typeof vi.fn>;
+  };
+  accountDefaults: { resolveLineAccount: ReturnType<typeof vi.fn> };
+  linesRepo: {
+    create: ReturnType<typeof vi.fn>;
+    save: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+  };
   manager: { update: ReturnType<typeof vi.fn> };
 } {
   const invoices = {
@@ -124,16 +137,41 @@ function createService(current: SalesInvoice): {
     assertAcceptsPostings: vi.fn(),
   };
 
+  // Mục 10.C.2 — mặc định "không thuế": mọi dòng 0 và không có dòng bút toán thuế nào.
+  const taxes = {
+    resolveDocumentTaxes: vi.fn(
+      async (lines: { amount: string }[]) => ({
+        lines: lines.map(() => ({
+          taxCodeId: null,
+          taxCode: null,
+          taxRate: '0.0000',
+          taxAmount: '0.0000',
+        })),
+        headerTax: new Decimal(0),
+      }),
+    ),
+    groupVatByAccount: vi.fn(async () => []),
+  };
+  const accountDefaults = {
+    resolveLineAccount: vi.fn(async () => ({ id: 'acc-511', code: '511' })),
+  };
+  const linesRepo = {
+    create: vi.fn((entity: unknown) => entity),
+    save: vi.fn(async (entity: unknown) => entity),
+    delete: vi.fn(async () => ({ affected: 0 })),
+  };
+
   const service = new SalesInvoicesService(
     invoices as never,
-    { save: vi.fn(), delete: vi.fn(), create: vi.fn() } as never,
+    linesRepo as never,
     { resolveActive: vi.fn() } as never,
     accounts as never,
-    { resolveLineAccount: vi.fn() } as never,
+    accountDefaults as never,
     allocations as never,
     periods as never,
     journals as never,
     webhooks as never,
+    taxes as never,
     { transaction: vi.fn() } as never,
   );
 
@@ -143,6 +181,9 @@ function createService(current: SalesInvoice): {
     journals,
     webhooks,
     allocations,
+    taxes,
+    accountDefaults,
+    linesRepo,
     manager,
   };
 }
@@ -293,5 +334,141 @@ describe('SalesInvoicesService — vòng đời & ghi sổ', () => {
         'user-poster',
       ),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+/**
+ * Mục 10.C.2 — thuế GTGT đầu ra.
+ *
+ * Điều đáng test ở đây **không** phải "có thuế thì cộng thêm một dòng", mà là **bất biến
+ * cân bằng**: trước 10.C.2, `post` ghi Nợ 131 = tổng nhưng chỉ Có doanh thu = subtotal,
+ * nên hóa đơn có thuế sinh ra bút toán **mất cân bằng**. Test dưới đây chốt rằng phần
+ * chênh lệch nay có một dòng Có TK thuế, và rằng thuế đầu chứng từ lệch tổng các dòng
+ * thì **bị chặn** chứ không âm thầm ghi sổ theo một con số sai.
+ */
+describe('SalesInvoicesService — thuế GTGT đầu ra (mục 10.C.2)', () => {
+  it('post: sinh dòng Có TK thuế (3331) và Σ Nợ = Σ Có', async () => {
+    const base = invoice();
+    const current = invoice({
+      status: InvoiceStatus.APPROVED,
+      subtotal: '1000000.0000',
+      taxAmount: '100000.0000',
+      total: '1100000.0000',
+      lines: [
+        {
+          ...base.lines[0],
+          amount: '1000000.0000',
+          taxCodeId: 'tax-10',
+          taxRate: '10.0000',
+          taxAmount: '100000.0000',
+        },
+      ],
+    });
+    const { service, journals, taxes } = createService(current);
+    taxes.groupVatByAccount.mockResolvedValue([
+      { accountId: 'acc-3331', amount: '100000.0000' },
+    ]);
+
+    await service.post(UUID, 'user-poster');
+
+    // Tài khoản thuế phải được giải theo chiều **đầu ra**.
+    expect(taxes.groupVatByAccount).toHaveBeenCalledWith(current.lines, 'output');
+
+    const dto = journals.postDocument.mock.calls[0][0] as {
+      lines: { accountId: string; debit?: string; credit?: string }[];
+    };
+    expect(dto.lines).toHaveLength(3);
+    expect(dto.lines[0]).toMatchObject({ accountId: 'acc-131', debit: '1100000.0000' });
+    expect(dto.lines[1]).toMatchObject({ accountId: 'acc-511', credit: '1000000.0000' });
+    expect(dto.lines[2]).toMatchObject({ accountId: 'acc-3331', credit: '100000.0000' });
+
+    const debit = dto.lines.reduce(
+      (sum, line) => sum.plus(new Decimal(line.debit ?? '0')),
+      new Decimal(0),
+    );
+    const credit = dto.lines.reduce(
+      (sum, line) => sum.plus(new Decimal(line.credit ?? '0')),
+      new Decimal(0),
+    );
+    expect(debit.equals(credit)).toBe(true);
+  });
+
+  it('post: thuế đầu hóa đơn lệch tổng thuế các dòng ⇒ từ chối, không ghi sổ', async () => {
+    const base = invoice();
+    const current = invoice({
+      status: InvoiceStatus.APPROVED,
+      taxAmount: '50000.0000',
+      lines: [{ ...base.lines[0], taxAmount: '100000.0000' }],
+    });
+    const { service, journals } = createService(current);
+
+    await expect(service.post(UUID, 'user-poster')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(journals.postDocument).not.toHaveBeenCalled();
+  });
+
+  it('create: tổng thuế lấy theo dòng và thuế suất được sao lại vào dòng', async () => {
+    const { service, taxes, linesRepo, invoices } = createService(invoice());
+    taxes.resolveDocumentTaxes.mockResolvedValue({
+      lines: [
+        {
+          taxCodeId: 'tax-10',
+          taxCode: 'VAT10',
+          taxRate: '10.0000',
+          taxAmount: '100000.0000',
+        },
+      ],
+      headerTax: new Decimal('100000'),
+    });
+
+    await service.create(
+      {
+        invoiceNo: 'INV-2026-0002',
+        partyId: 'party-1',
+        date: '2026-03-01',
+        subtotal: '1000000.0000',
+        taxAmount: '100000.0000',
+        total: '1100000.0000',
+        lines: [{ amount: '1000000.0000', taxCodeId: 'tax-10' }],
+      },
+      { id: 'user-maker' } as never,
+    );
+
+    expect(invoices.save).toHaveBeenCalledWith(
+      expect.objectContaining({ taxAmount: '100000.0000', total: '1100000.0000' }),
+    );
+    expect(linesRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taxCodeId: 'tax-10',
+        taxRate: '10.0000',
+        taxAmount: '100000.0000',
+      }),
+    );
+  });
+
+  it('create: subtotal + thuế khác tổng tiền ⇒ từ chối', async () => {
+    const { service, taxes } = createService(invoice());
+    taxes.resolveDocumentTaxes.mockResolvedValue({
+      lines: [
+        { taxCodeId: 'tax-10', taxCode: 'VAT10', taxRate: '10.0000', taxAmount: '100000.0000' },
+      ],
+      headerTax: new Decimal('100000'),
+    });
+
+    await expect(
+      service.create(
+        {
+          invoiceNo: 'INV-2026-0003',
+          partyId: 'party-1',
+          date: '2026-03-01',
+          subtotal: '1000000.0000',
+          taxAmount: '100000.0000',
+          total: '1090000.0000',
+          lines: [{ amount: '1000000.0000', taxCodeId: 'tax-10' }],
+        },
+        { id: 'user-maker' } as never,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

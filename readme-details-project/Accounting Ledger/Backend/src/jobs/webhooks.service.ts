@@ -29,6 +29,7 @@ import {
   WebhookEventType,
 } from './enums/webhook.enum.js';
 import { QueueService } from './queue.service.js';
+import { InboundEventRegistry } from './inbound-event-registry.service.js';
 
 /** Endpoint trả ra API — **không bao giờ** kèm `secret`. */
 export interface WebhookEndpointView {
@@ -139,6 +140,7 @@ export class WebhooksService {
     @InjectRepository(WebhookEvent)
     private readonly events: Repository<WebhookEvent>,
     private readonly queue: QueueService,
+    private readonly inbound: InboundEventRegistry,
   ) {}
 
   // ------------------------------------------------------------- endpoint
@@ -627,15 +629,51 @@ export class WebhooksService {
       });
     }
 
-    return this.storeEvent({
+    return this.dispatchAccepted({
       externalId,
       eventType,
       resourceRef,
       occurredAt: parsedOccurredAt,
-      status: WebhookEventStatus.PROCESSED,
-      reason: null,
       payload,
     });
+  }
+
+  /**
+   * Lưu sự kiện đã qua kiểm tra rồi **phát cho các handler nghiệp vụ**.
+   *
+   * Tách khỏi `receiveInbound` để phần "an toàn giao vận" (chống trùng, đến trễ,
+   * chữ ký) không bị lẫn với phần "áp dụng nghiệp vụ": handler do module nghiệp vụ
+   * tự đăng ký, lỗi của handler **không** làm mất sự kiện (đã lưu ở `webhook_events`).
+   */
+  private async dispatchAccepted(input: {
+    externalId: string;
+    eventType: string;
+    resourceRef: string;
+    occurredAt: Date;
+    payload: Record<string, unknown>;
+  }): Promise<InboundWebhookResult> {
+    const stored = await this.storeEvent({
+      externalId: input.externalId,
+      eventType: input.eventType,
+      resourceRef: input.resourceRef,
+      occurredAt: input.occurredAt,
+      status: WebhookEventStatus.PROCESSED,
+      reason: null,
+      payload: input.payload,
+    });
+
+    if (stored.status === WebhookEventStatus.PROCESSED && stored.eventId) {
+      await this.inbound.dispatch({
+        eventId: stored.eventId,
+        externalId: input.externalId,
+        eventType: input.eventType,
+        resourceRef: input.resourceRef,
+        occurredAt: input.occurredAt,
+        payload: input.payload,
+      });
+    }
+
+    return stored;
   }
 
   /** Ký payload: `sha256=<hex>` của HMAC-SHA256. */

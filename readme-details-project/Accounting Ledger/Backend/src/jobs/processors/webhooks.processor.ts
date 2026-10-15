@@ -4,6 +4,7 @@ import type { Job } from 'bullmq';
 import { JobName, JobQueue } from '../enums/job.enum.js';
 import type { DeliverWebhookPayload } from '../interfaces/job-payload.interface.js';
 import { JobRunsService } from '../job-runs.service.js';
+import { QueueService } from '../queue.service.js';
 import { WebhooksService } from '../webhooks.service.js';
 import { TrackedWorkerHost } from './tracked-worker-host.js';
 
@@ -21,8 +22,9 @@ export class WebhooksProcessor extends TrackedWorkerHost {
   constructor(
     runs: JobRunsService,
     private readonly webhooks: WebhooksService,
+    private readonly queue: QueueService,
   ) {
-    super(runs);
+    super(runs, queue);
   }
 
   protected async handle(job: Job): Promise<Record<string, unknown>> {

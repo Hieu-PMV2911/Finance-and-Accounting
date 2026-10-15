@@ -334,9 +334,10 @@ nằm ở **`EXTENSION_PLAN.md`** — đây là bản tóm tắt.
   tuổi nợ, thanh toán một phần, báo cáo công nợ/doanh thu theo khách; nâng cấp `debt-reminder`.
 - **10.B — Payment & Reconciliation (6–8 tuần):** vòng đời thanh toán có nhánh `unknown` (timeout ≠ thất bại),
   provider mô phỏng, idempotency, webhook + kết quả đến trễ, sao kê ngân hàng, khớp 3 tầng, danh sách lệch,
-  dead-letter queue.
+  dead-letter queue. ✅ **đã triển khai (BE)** — xem `MUC-10-TIEP-THEO.md` §5.
 - **10.C — Nâng cao (4–6 tuần):** đa tiền tệ (tỷ giá nhập tay + chênh lệch tỷ giá) → thuế GTGT → đa công ty
-  (migration riêng, cách ly theo `company_id`).
+  (migration riêng, cách ly theo `company_id`). ✅ **10.C.1 (đa tiền tệ) + 10.C.2 (thuế GTGT) đã triển khai** —
+  xem `MUC-10-TIEP-THEO.md` §6; ⏳ **10.C.3 (đa công ty)** còn lại.
 
 > Thứ tự thực thi **đảo** so với tài liệu gốc (10.A trước 10.B): đối soát chỉ có nghĩa khi đã có giao dịch
 > nội bộ (hóa đơn, phiếu thu/chi, công nợ) để đối chiếu. Xem lý do ở `EXTENSION_PLAN.md` mục 5.

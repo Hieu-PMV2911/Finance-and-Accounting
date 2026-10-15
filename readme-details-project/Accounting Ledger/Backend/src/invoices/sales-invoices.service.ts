@@ -31,6 +31,7 @@ import { JournalsService } from '../journals/journals.service.js';
 import { WebhookEventType } from '../jobs/enums/webhook.enum.js';
 import { WebhooksService } from '../jobs/webhooks.service.js';
 import { PartiesService } from '../parties/parties.service.js';
+import { TaxCodesService } from '../taxes/tax-codes.service.js';
 import type {
   CreateSalesInvoiceDto,
   CreateSalesInvoiceLineDto,
@@ -56,6 +57,8 @@ export class SalesInvoicesService {
     private readonly periods: FiscalPeriodsService,
     private readonly journals: JournalsService,
     private readonly webhooks: WebhooksService,
+    // Mục 10.C.2 — thuế GTGT đầu ra: giải thuế suất cho dòng và tài khoản 3331.
+    private readonly taxes: TaxCodesService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -101,12 +104,21 @@ export class SalesInvoicesService {
     await this.parties.resolveActive(dto.partyId);
 
     const subtotal = toMoney(dto.subtotal);
-    const tax = toMoney(dto.taxAmount ?? '0');
     const total = toMoney(dto.total);
     const lineTotal = sumMoney(dto.lines.map((l) => l.amount));
     if (!lineTotal.equals(subtotal)) {
       throw new BadRequestException('Tổng dòng phải bằng subtotal');
     }
+
+    // Mục 10.C.2 — thuế là lớp tính **trên dòng**: mỗi dòng tự chốt thuế suất (sao lại)
+    // và tiền thuế. Thuế trên đầu chứng từ là **tổng của các dòng**; nếu người lập khai
+    // sẵn thì phải khớp, nếu không thì lấy theo tổng dòng.
+    const { lines: lineTaxes, headerTax: tax } =
+      await this.taxes.resolveDocumentTaxes(
+        dto.lines,
+        dto.taxAmount,
+        'hóa đơn bán',
+      );
     if (!subtotal.plus(tax).equals(total)) {
       throw new BadRequestException('Subtotal + thuế phải bằng tổng tiền');
     }
@@ -145,6 +157,9 @@ export class SalesInvoicesService {
         quantity: moneyToString(l.quantity ?? '1.0000'),
         unitPrice: moneyToString(l.unitPrice ?? l.amount),
         amount: moneyToString(l.amount),
+        taxCodeId: lineTaxes[idx].taxCodeId,
+        taxRate: lineTaxes[idx].taxRate,
+        taxAmount: lineTaxes[idx].taxAmount,
       });
     });
     await this.lines.save(lines);
@@ -178,8 +193,14 @@ export class SalesInvoicesService {
     });
 
     if (dto.lines) {
-      // Thay toàn bộ dòng ⇒ phải giải lại tài khoản cho từng dòng mới.
+      // Thay toàn bộ dòng ⇒ phải giải lại tài khoản **và thuế** cho từng dòng mới.
       const lineAccounts = await this.resolveLineAccounts(dto.lines, actor);
+      const { lines: lineTaxes, headerTax } =
+        await this.taxes.resolveDocumentTaxes(
+          dto.lines,
+          dto.taxAmount,
+          'hóa đơn bán',
+        );
       await this.lines.delete({ invoiceId: invoice.id });
       const lines = dto.lines.map((l, idx) => {
         return this.lines.create({
@@ -190,12 +211,15 @@ export class SalesInvoicesService {
           quantity: moneyToString(l.quantity ?? '1.0000'),
           unitPrice: moneyToString(l.unitPrice ?? l.amount),
           amount: moneyToString(l.amount),
+          taxCodeId: lineTaxes[idx].taxCodeId,
+          taxRate: lineTaxes[idx].taxRate,
+          taxAmount: lineTaxes[idx].taxAmount,
         });
       });
       await this.lines.save(lines);
-      // Recalc totals if provided
+      // Tổng thuế luôn lấy theo dòng — không nhận một `taxAmount` rời khỏi dòng.
+      invoice.taxAmount = moneyToString(headerTax);
       if (dto.subtotal !== undefined) invoice.subtotal = moneyToString(dto.subtotal);
-      if (dto.taxAmount !== undefined) invoice.taxAmount = moneyToString(dto.taxAmount);
       if (dto.total !== undefined) invoice.total = moneyToString(dto.total);
     }
 
@@ -311,7 +335,19 @@ export class SalesInvoicesService {
       throw new BadRequestException('Hóa đơn không có dòng');
     }
 
-    // Bút toán: Nợ tài khoản phải thu (kèm đối tượng) / Có doanh thu theo từng dòng.
+    // Mục 10.C.2 — bất biến phải giữ **tại đây**, không chỉ ở `create`: `post` mới là nơi
+    // sinh bút toán. Nếu thuế đầu chứng từ lệch tổng thuế các dòng mà vẫn ghi sổ thì bút
+    // toán mất cân bằng (Nợ ≠ Có) hoặc cân bằng theo một con số sai — cả hai đều là lỗi
+    // nghiêm trọng mà không bất biến nào khác bắt được.
+    const lineTaxTotal = sumMoney(lines.map((line) => line.taxAmount));
+    if (!lineTaxTotal.equals(toMoney(invoice.taxAmount))) {
+      throw new ConflictException(
+        `Thuế trên hóa đơn (${moneyToString(invoice.taxAmount)}) không khớp tổng thuế các dòng (${moneyToString(lineTaxTotal)}) — từ chối ghi sổ`,
+      );
+    }
+
+    // Bút toán: Nợ tài khoản phải thu (kèm đối tượng) / Có doanh thu theo từng dòng /
+    // Có thuế GTGT đầu ra (mục 10.C.2).
     const journalLines: CreateJournalLineDto[] = [];
 
     journalLines.push({
@@ -327,6 +363,17 @@ export class SalesInvoicesService {
         accountId: line.accountId,
         credit: moneyToString(line.amount),
         description: line.description ?? invoice.description ?? `Hóa đơn ${invoice.invoiceNo}`,
+      });
+    }
+
+    // Credit VAT output lines — gom theo tài khoản thuế đích (3331 hoặc tài khoản đã khai
+    // trên mã thuế). Nhờ đó Σ Nợ = Σ Có luôn đúng dù có thuế.
+    const vatGroups = await this.taxes.groupVatByAccount(lines, 'output');
+    for (const group of vatGroups) {
+      journalLines.push({
+        accountId: group.accountId,
+        credit: group.amount,
+        description: `Thuế GTGT đầu ra — hóa đơn ${invoice.invoiceNo}`,
       });
     }
 

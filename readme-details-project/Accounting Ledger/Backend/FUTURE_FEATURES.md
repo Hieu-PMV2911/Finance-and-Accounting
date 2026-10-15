@@ -120,7 +120,7 @@
 - ⏳ Còn lại: dead-letter queue riêng cho job thất bại vĩnh viễn, gửi email/SMS,
   Bull Board/UI giám sát chuyên sâu, và định kỳ dọn file báo cáo cũ.
 
-## 10. Mở rộng (dài hạn) — ✅ 10.0 & 10.A đã xong · ⏳ 10.B & 10.C (kế hoạch ở `../EXTENSION_PLAN.md`)
+## 10. Mở rộng (dài hạn) — ✅ 10.0, 10.A, 10.B & 10.C.1–10.C.2 đã xong · ⏳ 10.C.3 (đa công ty) + FE
 
 Biến lõi sổ cái (mục 1–9) thành quy trình chứng từ: **Mini ERP** + **Payment & Reconciliation**,
 rồi lên **đa tiền tệ · đa công ty · thuế**. Bốn chiều thông tin còn thiếu phải bổ sung **trước**
@@ -131,8 +131,10 @@ trúc (source_type/source_id)**, **phân bổ thanh toán (allocations)**, **ti�
 |---|---|---|
 | **10.0 — Nền chung** | `parties` (+ `summary`/`usage`) · `journal_lines.party_id` (sổ cái phụ `GET /ledger/sub-ledger`) · `journal_entries.source_type/source_id` + `UNIQUE(source_type, source_id)` · `allocations` · truy vết trả `source {type, id, code}` | ✅ xong |
 | **10.A — Mini ERP** | Customer/Vendor, Sales Invoice, Vendor Bill, Phiếu thu/chi + phân bổ, **công nợ + tuổi nợ** (`receivables-aging`/`payables-aging`/`revenue-by-party`), luật mặc định tài khoản, `approve/post/void` + bút toán đảo, webhook `*.posted` + `invoice.overdue` | ✅ xong (xem `../MUC-10-TIEP-THEO.md` — nghiệm thu qua HTTP còn ⛔ khi chưa có Postgres) |
-| **10.B — Payment & Reconciliation** | Vòng đời thanh toán (`initiated → authorized → captured → settled`, nhánh `unknown` cho timeout), idempotency, webhook + kết quả đến trễ, sao kê ngân hàng, khớp 3 tầng, **danh sách giao dịch lệch**, dead-letter queue | ⏳ kế hoạch |
-| **10.C — Nâng cao** | Đa tiền tệ (bảng `exchange_rates` nhập tay + chênh lệch tỷ giá) → thuế GTGT (`tax_codes`) → **đa công ty** (migration riêng) | ⏳ kế hoạch |
+| **10.B — Payment & Reconciliation** | Vòng đời thanh toán (`initiated → authorized → captured → settled`, nhánh `unknown` cho timeout), idempotency, webhook + kết quả đến trễ, sao kê ngân hàng, khớp 3 tầng, **danh sách giao dịch lệch**, dead-letter queue | ✅ xong (xem `../MUC-10-TIEP-THEO.md` §5 — nghiệm thu qua HTTP còn ⛔ khi chưa có Postgres) |
+| **10.C.1 — Đa tiền tệ** | `companies.baseCurrency` (tiền hạch toán cấu hình được) · `currencies` + `exchange_rates` (nhập tay, tra "không muộn hơn ngày", **không nội suy**) · `journal_lines.currency/fx_amount/fx_rate` · chênh lệch tỷ giá 413/515/635 | ✅ xong (xem `../MUC-10-TIEP-THEO.md` §6) |
+| **10.C.2 — Thuế GTGT** | `tax_codes` (bảng cấu hình) · thuế **trên dòng** chứng từ, thuế suất **sao lại** · dòng thuế sinh tự động khi post (Có 3331 / Nợ 1331) · bảng kê GTGT đầu vào/đầu ra + xuất Excel | ✅ xong (xem `../MUC-10-TIEP-THEO.md` §6) |
+| **10.C.3 — Đa công ty** | `company_id` trên mọi bảng nghiệp vụ (3 bước: nullable → backfill → NOT NULL), cách ly dữ liệu qua `AsyncLocalStorage`, unique key `(company_id, code)`, công tắc chọn công ty ở UI | ⏳ kế hoạch |
 
 **Nguyên tắc bất di bất dịch:** mọi chứng từ của mục 10 ghi sổ **qua `JournalsService`** trong cùng
 transaction (không có bộ máy ghi sổ thứ hai); một chứng từ nguồn chỉ sinh **một** bút toán gốc; sửa

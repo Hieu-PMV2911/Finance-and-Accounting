@@ -14,8 +14,12 @@ import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { VendorBillsModule } from './bills/vendor-bills.module.js';
 import { CommonModule } from './common/common.module.js';
+// Mục 10.C.1 — công ty / pháp nhân: nguồn sự thật của đơn vị tiền hạch toán.
+import { CompaniesModule } from './companies/companies.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
+// Mục 10.C.1 — đa tiền tệ: danh mục tiền, bảng tỷ giá, chênh lệch tỷ giá.
+import { CurrenciesModule } from './currencies/currencies.module.js';
 import { FiscalPeriodsModule } from './fiscal-periods/fiscal-periods.module.js';
 import { AllocationsModule } from './allocations/allocations.module.js';
 import { SalesInvoicesModule } from './invoices/sales-invoices.module.js';
@@ -23,8 +27,14 @@ import { JobsModule } from './jobs/jobs.module.js';
 import { JournalsModule } from './journals/journals.module.js';
 import { LedgerModule } from './ledger/ledger.module.js';
 import { PartiesModule } from './parties/parties.module.js';
+// Mục 10.B — vòng đời yêu cầu thanh toán + provider (timeout ≠ thất bại).
+import { PaymentIntentsModule } from './payment-intents/payment-intents.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
+// Mục 10.B — sao kê ngân hàng & đối soát (một mô hình giao dịch chuẩn).
+import { ReconciliationModule } from './reconciliation/reconciliation.module.js';
 import { ReportsModule } from './reports/reports.module.js';
+// Mục 10.C.2 — thuế GTGT: danh mục mã thuế + tài khoản 3331/1331.
+import { TaxesModule } from './taxes/taxes.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -73,15 +83,24 @@ import { UsersModule } from './users/users.module.js';
     CommonModule,
     AuthModule,
     UsersModule,
+    // Mục 10.C.1 — công ty (đơn vị tiền hạch toán) + đa tiền tệ & tỷ giá.
+    CompaniesModule,
+    CurrenciesModule,
     // Mục 10.A — luật mặc định tài khoản cho dòng hóa đơn bán/mua.
     AccountDefaultsModule,
     AccountsModule,
-    // Mục 10.0 — đối tượng (khách hàng / nhà cung cấp) cho sổ cái phụ.
+    // Mục 10.A — đối tượng (khách hàng / nhà cung cấp) cho sổ cái phụ.
     PartiesModule,
+    // Mục 10.C.2 — mã thuế GTGT dùng khi lập/ghi sổ hóa đơn bán & mua.
+    TaxesModule,
     SalesInvoicesModule,
     VendorBillsModule,
     // Mục 10.A — phiếu thu/chi + phân bổ thanh toán một phần.
     PaymentsModule,
+    // Mục 10.B — yêu cầu thanh toán (payment intent) + provider mô phỏng.
+    PaymentIntentsModule,
+    // Mục 10.B — sao kê ngân hàng + khớp đối soát + xử lý lệch.
+    ReconciliationModule,
     // Mục 10.0 — phân bổ thanh toán giữa chứng từ đích và nguồn.
     AllocationsModule,
     LedgerModule,

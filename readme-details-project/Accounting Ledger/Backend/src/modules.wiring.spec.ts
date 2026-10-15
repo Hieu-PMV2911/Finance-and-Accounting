@@ -21,6 +21,15 @@ import {
   VendorBillLine,
 } from './bills/entities/vendor-bill.entity.js';
 import { CommonModule } from './common/common.module.js';
+import { CompaniesModule } from './companies/companies.module.js';
+import { CompaniesService } from './companies/companies.service.js';
+import { Company } from './companies/entities/company.entity.js';
+import { CurrenciesModule } from './currencies/currencies.module.js';
+import { CurrenciesService } from './currencies/currencies.service.js';
+import { Currency } from './currencies/entities/currency.entity.js';
+import { ExchangeRate } from './currencies/entities/exchange-rate.entity.js';
+import { ExchangeRatesService } from './currencies/exchange-rates.service.js';
+import { FxDifferenceService } from './currencies/fx-difference.service.js';
 import { FiscalPeriod } from './fiscal-periods/entities/fiscal-period.entity.js';
 import { FiscalPeriodsModule } from './fiscal-periods/fiscal-periods.module.js';
 import { FiscalPeriodsService } from './fiscal-periods/fiscal-periods.service.js';
@@ -49,6 +58,10 @@ import { PaymentsService } from './payments/payments.service.js';
 import { AgingReportService } from './reports/aging-report.service.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { ReportsService } from './reports/reports.service.js';
+import { VatReportService } from './reports/vat-report.service.js';
+import { TaxCode } from './taxes/entities/tax-code.entity.js';
+import { TaxCodesService } from './taxes/tax-codes.service.js';
+import { TaxesModule } from './taxes/taxes.module.js';
 import { RefreshToken } from './users/entities/refresh-token.entity.js';
 import { User } from './users/entities/user.entity.js';
 import { UsersModule } from './users/users.module.js';
@@ -90,6 +103,32 @@ function withJobsTree(builder: TestingModuleBuilder): TestingModuleBuilder {
   ]) {
     builder.overrideProvider(getRepositoryToken(entity)).useValue({});
   }
+  return builder;
+}
+
+/**
+ * Thay repository cho **cả cây `CurrenciesModule`** (mục 10.C.1).
+ *
+ * Từ 10.C.1, `JournalsModule` import `CurrenciesModule` để tra tỷ giá khi dòng bút
+ * toán khai ngoại tệ ⇒ **mọi** test DI đi qua bút toán đều kéo theo ba repository
+ * `Company` / `Currency` / `ExchangeRate`. Khai báo một chỗ để lần sau thêm bảng
+ * của 10.C không phải sửa từng test rời rạc.
+ */
+function withCurrencyTree(builder: TestingModuleBuilder): TestingModuleBuilder {
+  for (const entity of [Company, Currency, ExchangeRate]) {
+    builder.overrideProvider(getRepositoryToken(entity)).useValue({});
+  }
+  return builder;
+}
+
+/**
+ * Thay repository cho **cả cây `TaxesModule`** (mục 10.C.2).
+ *
+ * Từ 10.C.2, `SalesInvoicesModule` / `VendorBillsModule` import `TaxesModule` để áp thuế
+ * khi lập và ghi sổ ⇒ mọi test DI của hai module đó kéo theo repository `TaxCode`.
+ */
+function withTaxTree(builder: TestingModuleBuilder): TestingModuleBuilder {
+  builder.overrideProvider(getRepositoryToken(TaxCode)).useValue({});
   return builder;
 }
 
@@ -213,32 +252,33 @@ describe('Module wiring', () => {
     await moduleRef.close();
   });
 
-  it('JournalsModule khởi tạo được JournalsService (kèm Accounts + Periods + Ledger)', async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [StubDataSourceModule, JournalsModule],
-    })
-      .overrideProvider(getRepositoryToken(JournalEntry))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(JournalLine))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(FiscalPeriod))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(AccountBalance))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(Account))
-      .useValue({})
-      // JournalsModule import PartiesModule trực tiếp và qua LedgerModule.
-      .overrideProvider(getRepositoryToken(Party))
-      .useValue({})
-      .compile();
+  it('JournalsModule khởi tạo được JournalsService (kèm Accounts + Periods + Ledger + Currencies)', async () => {
+    const moduleRef = await withCurrencyTree(
+      Test.createTestingModule({
+        imports: [StubDataSourceModule, JournalsModule],
+      })
+        .overrideProvider(getRepositoryToken(JournalEntry))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(JournalLine))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(FiscalPeriod))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(AccountBalance))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(Account))
+        .useValue({})
+        // JournalsModule import PartiesModule trực tiếp và qua LedgerModule.
+        .overrideProvider(getRepositoryToken(Party))
+        .useValue({}),
+    ).compile();
 
     expect(moduleRef.get(JournalsService)).toBeInstanceOf(JournalsService);
     await moduleRef.close();
   });
 
-  it('ReportsModule khởi tạo được ReportsService và AgingReportService', async () => {
+  it('ReportsModule khởi tạo được ReportsService, AgingReportService và VatReportService', async () => {
     const moduleRef = await Test.createTestingModule({
-      // `AgingReportService` đọc thẳng bằng `DataSource.query` ⇒ cần stub.
+      // `AgingReportService` / `VatReportService` đọc thẳng bằng `DataSource.query` ⇒ cần stub.
       imports: [StubDataSourceModule, ReportsModule],
     })
       .overrideProvider(getRepositoryToken(JournalLine))
@@ -251,29 +291,31 @@ describe('Module wiring', () => {
 
     expect(moduleRef.get(ReportsService)).toBeInstanceOf(ReportsService);
     expect(moduleRef.get(AgingReportService)).toBeInstanceOf(AgingReportService);
+    expect(moduleRef.get(VatReportService)).toBeInstanceOf(VatReportService);
     await moduleRef.close();
   });
 
-  it('AuditModule khởi tạo được AuditService (kèm Journals + Ledger)', async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [StubDataSourceModule, AuditModule],
-    })
-      .overrideProvider(getRepositoryToken(AuditLog))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(JournalEntry))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(JournalLine))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(FiscalPeriod))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(AccountBalance))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(Account))
-      .useValue({})
-      // AuditModule → JournalsModule → (LedgerModule, PartiesModule).
-      .overrideProvider(getRepositoryToken(Party))
-      .useValue({})
-      .compile();
+  it('AuditModule khởi tạo được AuditService (kèm Journals + Ledger + Currencies)', async () => {
+    const moduleRef = await withCurrencyTree(
+      Test.createTestingModule({
+        imports: [StubDataSourceModule, AuditModule],
+      })
+        .overrideProvider(getRepositoryToken(AuditLog))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(JournalEntry))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(JournalLine))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(FiscalPeriod))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(AccountBalance))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(Account))
+        .useValue({})
+        // AuditModule → JournalsModule → (LedgerModule, PartiesModule, CurrenciesModule).
+        .overrideProvider(getRepositoryToken(Party))
+        .useValue({}),
+    ).compile();
 
     expect(moduleRef.get(AuditService)).toBeInstanceOf(AuditService);
     await moduleRef.close();
@@ -295,32 +337,36 @@ describe('Module wiring', () => {
     await moduleRef.close();
   });
 
-  it('SalesInvoicesModule khởi tạo được SalesInvoicesService (kèm AccountDefaults + Parties + Journals)', async () => {
-    const moduleRef = await withJobsTree(
-      Test.createTestingModule({
-        imports: [StubDataSourceModule, SalesInvoicesModule],
-      })
-      .overrideProvider(getRepositoryToken(SalesInvoice))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(SalesInvoiceLine))
-      .useValue({})
-      // AllocationsModule cũng nằm trong cây import (chặn hủy khi còn phân bổ).
-      .overrideProvider(getRepositoryToken(Allocation))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(AccountDefaultRule))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(Party))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(Account))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(AccountBalance))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(FiscalPeriod))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(JournalEntry))
-      .useValue({})
-        .overrideProvider(getRepositoryToken(JournalLine))
-        .useValue({}),
+  it('SalesInvoicesModule khởi tạo được SalesInvoicesService (kèm AccountDefaults + Parties + Journals + Taxes)', async () => {
+    const moduleRef = await withTaxTree(
+      withCurrencyTree(
+        withJobsTree(
+          Test.createTestingModule({
+            imports: [StubDataSourceModule, SalesInvoicesModule],
+          })
+            .overrideProvider(getRepositoryToken(SalesInvoice))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(SalesInvoiceLine))
+            .useValue({})
+            // AllocationsModule cũng nằm trong cây import (chặn hủy khi còn phân bổ).
+            .overrideProvider(getRepositoryToken(Allocation))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(AccountDefaultRule))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(Party))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(Account))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(AccountBalance))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(FiscalPeriod))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(JournalEntry))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(JournalLine))
+            .useValue({}),
+        ),
+      ),
     ).compile();
 
     expect(moduleRef.get(SalesInvoicesService)).toBeInstanceOf(
@@ -329,32 +375,36 @@ describe('Module wiring', () => {
     await moduleRef.close();
   });
 
-  it('VendorBillsModule khởi tạo được VendorBillsService (kèm AccountDefaults + Parties + Journals)', async () => {
-    const moduleRef = await withJobsTree(
-      Test.createTestingModule({
-        imports: [StubDataSourceModule, VendorBillsModule],
-      })
-      .overrideProvider(getRepositoryToken(VendorBill))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(VendorBillLine))
-      .useValue({})
-      // AllocationsModule cũng nằm trong cây import (chặn hủy khi còn phân bổ).
-      .overrideProvider(getRepositoryToken(Allocation))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(AccountDefaultRule))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(Party))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(Account))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(AccountBalance))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(FiscalPeriod))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(JournalEntry))
-      .useValue({})
-        .overrideProvider(getRepositoryToken(JournalLine))
-        .useValue({}),
+  it('VendorBillsModule khởi tạo được VendorBillsService (kèm AccountDefaults + Parties + Journals + Taxes)', async () => {
+    const moduleRef = await withTaxTree(
+      withCurrencyTree(
+        withJobsTree(
+          Test.createTestingModule({
+            imports: [StubDataSourceModule, VendorBillsModule],
+          })
+            .overrideProvider(getRepositoryToken(VendorBill))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(VendorBillLine))
+            .useValue({})
+            // AllocationsModule cũng nằm trong cây import (chặn hủy khi còn phân bổ).
+            .overrideProvider(getRepositoryToken(Allocation))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(AccountDefaultRule))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(Party))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(Account))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(AccountBalance))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(FiscalPeriod))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(JournalEntry))
+            .useValue({})
+            .overrideProvider(getRepositoryToken(JournalLine))
+            .useValue({}),
+        ),
+      ),
     ).compile();
 
     expect(moduleRef.get(VendorBillsService)).toBeInstanceOf(VendorBillsService);
@@ -362,29 +412,80 @@ describe('Module wiring', () => {
   });
 
   it('PaymentsModule khởi tạo được PaymentsService (kèm Allocations + Journals + Accounts)', async () => {
-    const moduleRef = await withJobsTree(
-      Test.createTestingModule({
-        imports: [StubDataSourceModule, PaymentsModule],
-      })
-      .overrideProvider(getRepositoryToken(Payment))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(Allocation))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(Party))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(Account))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(AccountBalance))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(FiscalPeriod))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(JournalEntry))
-      .useValue({})
-        .overrideProvider(getRepositoryToken(JournalLine))
-        .useValue({}),
+    const moduleRef = await withCurrencyTree(
+      withJobsTree(
+        Test.createTestingModule({
+          imports: [StubDataSourceModule, PaymentsModule],
+        })
+          .overrideProvider(getRepositoryToken(Payment))
+          .useValue({})
+          .overrideProvider(getRepositoryToken(Allocation))
+          .useValue({})
+          .overrideProvider(getRepositoryToken(Party))
+          .useValue({})
+          .overrideProvider(getRepositoryToken(Account))
+          .useValue({})
+          .overrideProvider(getRepositoryToken(AccountBalance))
+          .useValue({})
+          .overrideProvider(getRepositoryToken(FiscalPeriod))
+          .useValue({})
+          .overrideProvider(getRepositoryToken(JournalEntry))
+          .useValue({})
+          .overrideProvider(getRepositoryToken(JournalLine))
+          .useValue({}),
+      ),
     ).compile();
 
     expect(moduleRef.get(PaymentsService)).toBeInstanceOf(PaymentsService);
+    await moduleRef.close();
+  });
+
+  it('CompaniesModule khởi tạo được CompaniesService (mục 10.C.1)', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [CompaniesModule],
+    })
+      .overrideProvider(getRepositoryToken(Company))
+      .useValue({})
+      .compile();
+
+    expect(moduleRef.get(CompaniesService)).toBeInstanceOf(CompaniesService);
+    await moduleRef.close();
+  });
+
+  it('CurrenciesModule khởi tạo được CurrenciesService, ExchangeRatesService và FxDifferenceService (mục 10.C.1)', async () => {
+    const moduleRef = await withCurrencyTree(
+      // `PartiesService` (được `FxDifferenceService` dùng để giải đối tượng) cần `DataSource`.
+      Test.createTestingModule({
+        imports: [StubDataSourceModule, CurrenciesModule],
+      })
+        .overrideProvider(getRepositoryToken(Account))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(Party))
+        .useValue({}),
+    ).compile();
+
+    expect(moduleRef.get(CurrenciesService)).toBeInstanceOf(CurrenciesService);
+    expect(moduleRef.get(ExchangeRatesService)).toBeInstanceOf(
+      ExchangeRatesService,
+    );
+    expect(moduleRef.get(FxDifferenceService)).toBeInstanceOf(
+      FxDifferenceService,
+    );
+    await moduleRef.close();
+  });
+
+  it('TaxesModule khởi tạo được TaxCodesService (mục 10.C.2)', async () => {
+    const moduleRef = await Test.createTestingModule({
+      // `TaxCodesService.usageCount` đọc thẳng bằng `DataSource.query` ⇒ cần stub.
+      imports: [StubDataSourceModule, TaxesModule],
+    })
+      .overrideProvider(getRepositoryToken(TaxCode))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Account))
+      .useValue({})
+      .compile();
+
+    expect(moduleRef.get(TaxCodesService)).toBeInstanceOf(TaxCodesService);
     await moduleRef.close();
   });
 });

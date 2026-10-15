@@ -48,7 +48,7 @@ export class ReportsProcessor extends TrackedWorkerHost {
     private readonly storage: ReportStorageService,
     private readonly queue: QueueService,
   ) {
-    super(runs);
+    super(runs, queue);
   }
 
   protected async handle(

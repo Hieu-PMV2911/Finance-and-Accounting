@@ -216,6 +216,21 @@ function buildService(store: Store = createStore()) {
     transaction: vi.fn(async (run: (m: unknown) => Promise<unknown>) => run(manager)),
   };
 
+  // Mục 10.C.1 — mặc định coi mọi bút toán trong bộ test này là nội tệ (`VND`),
+  // nên `requireRate` không bao giờ được gọi. Test riêng cho ngoại tệ sẽ tự thay
+  // stub này bằng tỷ giá cụ thể.
+  const exchangeRates = {
+    baseCurrency: vi.fn(async () => 'VND'),
+    requireRate: vi.fn(async () => ({
+      currency: 'USD',
+      baseCurrency: 'VND',
+      rate: '24500.00000000',
+      rateDate: '2026-01-01',
+      fallback: false,
+      source: 'manual',
+    })),
+  };
+
   const service = new JournalsService(
     entries as never,
     lines as never,
@@ -223,10 +238,22 @@ function buildService(store: Store = createStore()) {
     periods as never,
     ledger as never,
     parties as never,
+    exchangeRates as never,
     dataSource as never,
   );
 
-  return { service, store, manager, entries, lines, accounts, periods, ledger, dataSource };
+  return {
+    service,
+    store,
+    manager,
+    entries,
+    lines,
+    accounts,
+    periods,
+    ledger,
+    exchangeRates,
+    dataSource,
+  };
 }
 
 type Ctx = ReturnType<typeof buildService>;
@@ -598,6 +625,265 @@ describe('JournalsService', () => {
         ctx.service.reverse('e1', { reason: 'Sai' }, 'poster-1'),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(ctx.ledger.applyMovements).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Mục 10.C.1 — dòng ngoại tệ.
+   *
+   * Bất biến trung tâm cần chứng minh: `debit`/`credit` **luôn** là tiền hạch toán và
+   * do người gọi cung cấp; cột ngoại tệ chỉ là *bằng chứng* nên service **kiểm tra
+   * ngược** chứ không tự ghi đè. Nếu service tự nhân hộ, một `fxRate` gõ sai sẽ tạo ra
+   * số tiền sai mà Σ Nợ = Σ Có vẫn "đúng" — không lá chắn nào phát hiện.
+   */
+  describe('mục 10.C.1 — dòng ngoại tệ', () => {
+    /** 1.000 USD × 24.500 = 24.500.000 VND. */
+    const fxLine = (overrides: Record<string, unknown> = {}) => ({
+      accountId: ACC_CASH,
+      debit: '24500000.0000',
+      currency: 'USD',
+      fxAmount: '1000.0000',
+      fxRate: '24500',
+      ...overrides,
+    });
+
+    it('nhận dòng ngoại tệ hợp lệ và lưu đủ ba cột ngoại tệ', async () => {
+      const entry = await ctx.service.create(
+        {
+          date: '2026-01-15',
+          description: 'Thu ngoại tệ',
+          lines: [
+            fxLine(),
+            { accountId: ACC_REVENUE, credit: '24500000.0000' },
+          ],
+        },
+        'user-1',
+      );
+
+      const stored = ctx.store.lines.filter((l) => l.entryId === entry.id);
+      const cash = stored.find((l) => l.accountId === ACC_CASH);
+
+      expect(cash?.currency).toBe('USD');
+      expect(cash?.fxAmount).toBe('1000.0000');
+      expect(cash?.fxRate).toBe('24500.00000000');
+      // `debit` vẫn là tiền hạch toán, không bị đổi thành số ngoại tệ.
+      expect(cash?.debit).toBe('24500000.0000');
+    });
+
+    it('dòng nội tệ để cả ba cột ngoại tệ là null', async () => {
+      const entry = await ctx.service.create(
+        {
+          date: '2026-01-15',
+          description: 'Nội tệ',
+          lines: balancedLines(),
+        },
+        'user-1',
+      );
+
+      const stored = ctx.store.lines.filter((l) => l.entryId === entry.id);
+      expect(stored.every((l) => l.currency === null)).toBe(true);
+      expect(stored.every((l) => l.fxAmount === null)).toBe(true);
+      expect(stored.every((l) => l.fxRate === null)).toBe(true);
+    });
+
+    it('CHẶN khi tiền hạch toán không khớp fxAmount × fxRate (không tự sửa)', async () => {
+      await expect(
+        ctx.service.create(
+          {
+            date: '2026-01-15',
+            description: 'Quy đổi sai',
+            lines: [
+              // 1.000 × 24.500 = 24.500.000, nhưng khai 24.000.000.
+              fxLine({ debit: '24000000.0000' }),
+              { accountId: ACC_REVENUE, credit: '24000000.0000' },
+            ],
+          },
+          'user-1',
+        ),
+      ).rejects.toThrow(/không khớp quy đổi/);
+    });
+
+    it('thông báo lỗi nêu cả số đã khai, tỷ giá và số đúng để sửa một lần', async () => {
+      const error = await ctx.service
+        .create(
+          {
+            date: '2026-01-15',
+            description: 'Quy đổi sai',
+            lines: [
+              fxLine({ debit: '24000000.0000' }),
+              { accountId: ACC_REVENUE, credit: '24000000.0000' },
+            ],
+          },
+          'user-1',
+        )
+        .catch((e: Error) => e);
+
+      expect((error as Error).message).toContain('24000000.0000');
+      expect((error as Error).message).toContain('24500');
+      expect((error as Error).message).toContain('24500000.0000');
+    });
+
+    it('bỏ trống fxRate ⇒ tra bảng tỷ giá theo ngày hạch toán', async () => {
+      ctx.exchangeRates.requireRate.mockResolvedValue({
+        currency: 'USD',
+        baseCurrency: 'VND',
+        rate: '24500.00000000',
+        rateDate: '2026-01-15',
+        fallback: false,
+        source: 'manual',
+      });
+
+      const entry = await ctx.service.create(
+        {
+          date: '2026-01-15',
+          description: 'Tra tỷ giá',
+          lines: [
+            fxLine({ fxRate: undefined }),
+            { accountId: ACC_REVENUE, credit: '24500000.0000' },
+          ],
+        },
+        'user-1',
+      );
+
+      expect(ctx.exchangeRates.requireRate).toHaveBeenCalledWith('USD', '2026-01-15');
+      const cash = ctx.store.lines.find(
+        (l) => l.entryId === entry.id && l.accountId === ACC_CASH,
+      );
+      expect(cash?.fxRate).toBe('24500.00000000');
+    });
+
+    it('có fxRate ⇒ KHÔNG gọi tra bảng tỷ giá (không phụ thuộc dữ liệu ngoài)', async () => {
+      await ctx.service.create(
+        {
+          date: '2026-01-15',
+          description: 'Tỷ giá chỉ định',
+          lines: [
+            fxLine(),
+            { accountId: ACC_REVENUE, credit: '24500000.0000' },
+          ],
+        },
+        'user-1',
+      );
+
+      expect(ctx.exchangeRates.requireRate).not.toHaveBeenCalled();
+    });
+
+    it('CHẶN dòng ngoại tệ thiếu fxAmount', async () => {
+      await expect(
+        ctx.service.create(
+          {
+            date: '2026-01-15',
+            description: 'Thiếu fxAmount',
+            lines: [
+              fxLine({ fxAmount: undefined }),
+              { accountId: ACC_REVENUE, credit: '24500000.0000' },
+            ],
+          },
+          'user-1',
+        ),
+      ).rejects.toThrow(/phải khai fxAmount/);
+    });
+
+    it('CHẶN khi khai fxAmount/fxRate mà thiếu currency', async () => {
+      await expect(
+        ctx.service.create(
+          {
+            date: '2026-01-15',
+            description: 'Thiếu currency',
+            lines: [
+              fxLine({ currency: undefined }),
+              { accountId: ACC_REVENUE, credit: '24500000.0000' },
+            ],
+          },
+          'user-1',
+        ),
+      ).rejects.toThrow(/thiếu currency/);
+    });
+
+    it('CHẶN khi khai ngoại tệ cho chính đơn vị tiền hạch toán', async () => {
+      await expect(
+        ctx.service.create(
+          {
+            date: '2026-01-15',
+            description: 'VND kèm fx',
+            lines: [
+              fxLine({ currency: 'VND' }),
+              { accountId: ACC_REVENUE, credit: '24500000.0000' },
+            ],
+          },
+          'user-1',
+        ),
+      ).rejects.toThrow(/đơn vị tiền hạch toán/);
+    });
+
+    it('CHẶN fxRate <= 0', async () => {
+      await expect(
+        ctx.service.create(
+          {
+            date: '2026-01-15',
+            description: 'Tỷ giá 0',
+            lines: [
+              fxLine({ fxRate: '0', debit: '0.0001' }),
+              { accountId: ACC_REVENUE, credit: '0.0001' },
+            ],
+          },
+          'user-1',
+        ),
+      ).rejects.toThrow(/fxRate phải lớn hơn 0/);
+    });
+
+    it('bất biến Σ Nợ = Σ Có vẫn áp dụng trên TIỀN HẠCH TOÁN', async () => {
+      await expect(
+        ctx.service.create(
+          {
+            date: '2026-01-15',
+            description: 'Ngoại tệ nhưng lệch',
+            lines: [
+              fxLine(),
+              { accountId: ACC_REVENUE, credit: '24500000.0000' },
+              // Dòng nội tệ thêm vào làm lệch ⇒ phải bị chặn bởi luật cân bằng.
+              { accountId: ACC_CASH, debit: '1.0000' },
+            ],
+          },
+          'user-1',
+        ),
+      ).rejects.toThrow(/không cân bằng/);
+    });
+
+    it('bút toán đảo sao lại nguyên cột ngoại tệ (không hoán đổi ngoại tệ)', async () => {
+      const entry = await ctx.service.create(
+        {
+          date: '2026-01-15',
+          description: 'Thu ngoại tệ',
+          lines: [
+            fxLine(),
+            { accountId: ACC_REVENUE, credit: '24500000.0000' },
+          ],
+        },
+        'user-1',
+      );
+
+      ctx.store.entries.find((e) => e.id === entry.id)!.status =
+        JournalStatus.POSTED;
+      ctx.store.entries.find((e) => e.id === entry.id)!.entryNo =
+        'JE-2026-01-0001';
+
+      const reversal = await ctx.service.reverse(
+        entry.id,
+        { reason: 'Sai sót' },
+        'poster-1',
+      );
+
+      const reversedCash = ctx.store.lines.find(
+        (l) => l.entryId === reversal.id && l.accountId === ACC_CASH,
+      );
+      // Nợ/Có hoán đổi…
+      expect(reversedCash?.debit).toBe('0.0000');
+      expect(reversedCash?.credit).toBe('24500000.0000');
+      // …nhưng ngoại tệ giữ nguyên, vì nó là số tiền của giao dịch gốc.
+      expect(reversedCash?.currency).toBe('USD');
+      expect(reversedCash?.fxAmount).toBe('1000.0000');
+      expect(reversedCash?.fxRate).toBe('24500.00000000');
     });
   });
 });

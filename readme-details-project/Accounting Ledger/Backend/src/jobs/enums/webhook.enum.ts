@@ -16,6 +16,10 @@ export enum WebhookEventType {
   PAYMENT_POSTED = 'payment.posted',
   /** Có hóa đơn bán quá hạn thanh toán (mục 10.A). */
   INVOICE_OVERDUE = 'invoice.overdue',
+  /** Yêu cầu thanh toán đã tất toán (mục 10.B). */
+  PAYMENT_INTENT_SETTLED = 'payment_intent.settled',
+  /** Phát hiện giao dịch lệch khi đối soát sao kê (mục 10.B). */
+  RECONCILIATION_EXCEPTION = 'reconciliation.exception',
   /** Webhook thử nghiệm (gọi từ giao diện để kiểm tra endpoint). */
   PING = 'ping',
 }
@@ -32,6 +36,8 @@ export const WEBHOOK_EVENT_LABELS: Record<WebhookEventType, string> = {
   [WebhookEventType.VENDOR_BILL_POSTED]: 'Hóa đơn mua đã ghi sổ',
   [WebhookEventType.PAYMENT_POSTED]: 'Phiếu thu/chi đã ghi sổ',
   [WebhookEventType.INVOICE_OVERDUE]: 'Hóa đơn quá hạn',
+  [WebhookEventType.PAYMENT_INTENT_SETTLED]: 'Thanh toán đã tất toán',
+  [WebhookEventType.RECONCILIATION_EXCEPTION]: 'Giao dịch lệch khi đối soát',
   [WebhookEventType.PING]: 'Thử nghiệm',
 };
 

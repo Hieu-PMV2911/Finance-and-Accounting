@@ -3,7 +3,7 @@ import type { Queue } from 'bullmq';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AuthUser } from '../common/interfaces/auth-user.interface.js';
-import { JobName, JobQueue, JobRunStatus, JobTrigger } from './enums/job.enum.js';
+import { JobName, JobQueue, JobRunStatus, JobTrigger, ALL_JOB_QUEUES } from './enums/job.enum.js';
 import type { JobRunsService } from './job-runs.service.js';
 import { QueueService } from './queue.service.js';
 
@@ -23,6 +23,10 @@ function build() {
   const maintenance = makeQueue();
   const notifications = makeQueue();
   const webhooks = makeQueue();
+  // Mục 10.B — hàng đợi thanh toán, sao kê và thư chết.
+  const payments = makeQueue();
+  const statements = makeQueue();
+  const deadLetter = makeQueue();
 
   const service = new QueueService(
     runs as unknown as JobRunsService,
@@ -30,9 +34,22 @@ function build() {
     maintenance as unknown as Queue,
     notifications as unknown as Queue,
     webhooks as unknown as Queue,
+    payments as unknown as Queue,
+    statements as unknown as Queue,
+    deadLetter as unknown as Queue,
   );
 
-  return { service, runs, reports, maintenance, notifications, webhooks };
+  return {
+    service,
+    runs,
+    reports,
+    maintenance,
+    notifications,
+    webhooks,
+    payments,
+    statements,
+    deadLetter,
+  };
 }
 
 describe('QueueService', () => {
@@ -123,7 +140,8 @@ describe('QueueService', () => {
 
     const overview = await service.overview();
 
-    expect(overview).toHaveLength(4);
+    // 4 hàng đợi của mục 9 + `payments`/`statements` (10.B) + `dead-letter`.
+    expect(overview).toHaveLength(ALL_JOB_QUEUES.length);
 
     const maintenanceView = overview.find((item) => item.queue === JobQueue.MAINTENANCE);
     expect(maintenanceView?.reachable).toBe(true);

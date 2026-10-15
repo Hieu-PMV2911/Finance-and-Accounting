@@ -13,6 +13,7 @@ import {
 import type { ReportTable } from './interfaces/report-table.interface.js';
 import { buildReportTable } from './report-table.builder.js';
 import { ReportsService } from './reports.service.js';
+import { VatReportService } from './vat-report.service.js';
 
 /** Kết quả xuất file: nội dung nhị phân + tên file gợi ý. */
 export interface ExportedReport {
@@ -61,7 +62,11 @@ function sanitizeSheetName(name: string): string {
 
 @Injectable()
 export class ReportExportService {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(
+    private readonly reports: ReportsService,
+    // Mục 10.C.2 — bảng kê thuế GTGT là báo cáo thứ tư có thể xuất ra file.
+    private readonly vat: VatReportService,
+  ) {}
 
   /** Dựng báo cáo rồi kết xuất ra `xlsx` hoặc `pdf`. */
   async export(kind: ReportKind, query: ExportReportDto): Promise<ExportedReport> {
@@ -88,6 +93,8 @@ export class ReportExportService {
         return this.reports.balanceSheet(query);
       case ReportKind.CASH_FLOW:
         return this.reports.cashFlow(query);
+      case ReportKind.VAT_INPUT_OUTPUT:
+        return this.vat.vatReport(query);
     }
   }
 

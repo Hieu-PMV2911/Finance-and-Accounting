@@ -11,6 +11,7 @@ import {
   WebhookEventType,
 } from './enums/webhook.enum.js';
 import type { QueueService } from './queue.service.js';
+import type { InboundEventRegistry } from './inbound-event-registry.service.js';
 import { WebhooksService } from './webhooks.service.js';
 
 /** Endpoint thật (có method `subscribesTo`) nhưng dữ liệu do test quyết định. */
@@ -51,15 +52,19 @@ function build() {
     save: vi.fn(),
   };
   const queue = { queueOf: vi.fn(), enqueue: vi.fn() };
+  // Mục 10.B — sổ đăng ký handler nhận sự kiện vào; test này không kiểm tra
+  // phần điều phối nên chỉ cần stub đủ để container dựng được service.
+  const inbound = { register: vi.fn(), listHandlers: vi.fn(), dispatch: vi.fn() };
 
   const service = new WebhooksService(
     endpoints as unknown as Repository<WebhookEndpoint>,
     deliveries as unknown as Repository<WebhookDelivery>,
     events as unknown as Repository<WebhookEvent>,
     queue as unknown as QueueService,
+    inbound as unknown as InboundEventRegistry,
   );
 
-  return { service, endpoints, deliveries, events, queue };
+  return { service, endpoints, deliveries, events, queue, inbound };
 }
 
 describe('WebhooksService', () => {

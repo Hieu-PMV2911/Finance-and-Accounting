@@ -17,6 +17,7 @@ import type {
 } from '../interfaces/job-payload.interface.js';
 import { JobRunsService } from '../job-runs.service.js';
 import { NotificationsService } from '../notifications.service.js';
+import { QueueService } from '../queue.service.js';
 import { WebhooksService } from '../webhooks.service.js';
 import { TrackedWorkerHost } from './tracked-worker-host.js';
 
@@ -40,8 +41,9 @@ export class MaintenanceProcessor extends TrackedWorkerHost {
     private readonly snapshots: BalanceSnapshotService,
     private readonly notifications: NotificationsService,
     private readonly webhooks: WebhooksService,
+    private readonly queue: QueueService,
   ) {
-    super(runs);
+    super(runs, queue);
   }
 
   protected async handle(job: Job): Promise<Record<string, unknown>> {

@@ -11,6 +11,7 @@ import type {
 import { JobRunsService } from '../job-runs.service.js';
 import { NotificationsService } from '../notifications.service.js';
 import { OverdueInvoiceSweepService } from '../overdue-invoice-sweep.service.js';
+import { QueueService } from '../queue.service.js';
 import { TrackedWorkerHost } from './tracked-worker-host.js';
 
 /**
@@ -34,8 +35,9 @@ export class NotificationsProcessor extends TrackedWorkerHost {
     private readonly notifications: NotificationsService,
     private readonly debtReminder: DebtReminderService,
     private readonly overdueSweep: OverdueInvoiceSweepService,
+    private readonly queue: QueueService,
   ) {
-    super(runs);
+    super(runs, queue);
   }
 
   protected async handle(job: Job): Promise<Record<string, unknown>> {

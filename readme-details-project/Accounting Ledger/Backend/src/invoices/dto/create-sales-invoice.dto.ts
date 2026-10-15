@@ -59,6 +59,15 @@ export class CreateSalesInvoiceLineDto {
   @IsString()
   @Matches(MONEY_PATTERN, { message: MONEY_MESSAGE })
   amount: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Mã thuế áp cho dòng (mục 10.C.2). Bỏ trống ⇒ dòng không chịu thuế. Thuế suất được SAO LẠI vào dòng khi lập, nên sửa mã thuế sau này không làm đổi hóa đơn cũ.',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'taxCodeId không hợp lệ' })
+  taxCodeId?: string;
 }
 
 export class CreateSalesInvoiceDto {

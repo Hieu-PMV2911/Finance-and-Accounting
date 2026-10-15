@@ -143,4 +143,39 @@ export class SalesInvoiceLine {
 
   @Column({ type: 'numeric', precision: 19, scale: 4, default: 0 })
   amount: string;
+
+  /**
+   * **Thuế của dòng** (mục 10.C.2).
+   *
+   * Quyết định đã chốt: thuế là *lớp tính trên dòng chứng từ* — vì vậy thuế suất nằm
+   * ở **dòng**, không chỉ ở đầu chứng từ. Hai dòng cùng hóa đơn có thể chịu thuế suất
+   * khác nhau (hàng hóa 10%, dịch vụ 8%), và gộp lại ở đầu chứng từ thì không tách ra
+   * được nữa khi lập bảng kê thuế.
+   *
+   * `tax_rate` là **bản sao** của thuế suất tại thời điểm lập, không phải tham chiếu:
+   * chứng từ đã ghi sổ là bất biến, nên sửa thuế suất trong danh mục không được làm
+   * đổi số liệu cũ. Cùng nguyên tắc với `journal_lines.fx_rate` ở 10.C.1.
+   */
+  @Column({ name: 'tax_code_id', type: 'uuid', nullable: true })
+  taxCodeId: string | null;
+
+  /** Thuế suất phần trăm đã áp (0 = không chịu thuế). */
+  @Column({
+    name: 'tax_rate',
+    type: 'numeric',
+    precision: 9,
+    scale: 4,
+    default: 0,
+  })
+  taxRate: string;
+
+  /** Tiền thuế của dòng = `amount × tax_rate / 100`, làm tròn 4 chữ số. */
+  @Column({
+    name: 'tax_amount',
+    type: 'numeric',
+    precision: 19,
+    scale: 4,
+    default: 0,
+  })
+  taxAmount: string;
 }
