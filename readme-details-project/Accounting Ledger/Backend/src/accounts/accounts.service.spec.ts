@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
+import { FindOperator } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AccountType } from '../common/enums/account-type.enum.js';
@@ -26,6 +27,30 @@ function makeAccount(partial: Partial<Account>): Account {
   } as Account;
 }
 
+/**
+ * So khớp `where` tối thiểu cho mock: bằng giá trị, và `Like('%')` theo tiền tố.
+ * `Like` được dịch thành `startsWith` để test đúng ngữ nghĩa `findOneByCodePattern`.
+ */
+function matchesWhere(
+  account: Account,
+  where: Record<string, unknown>,
+): boolean {
+  return Object.entries(where).every(([field, expected]) => {
+    const actual = (account as unknown as Record<string, unknown>)[field];
+    if (expected instanceof FindOperator) {
+      if (expected.type !== 'like') {
+        throw new Error(
+          `Mock chưa hỗ trợ FindOperator "${String(expected.type)}"`,
+        );
+      }
+      const pattern = String(expected.value);
+      const prefix = pattern.endsWith('%') ? pattern.slice(0, -1) : pattern;
+      return typeof actual === 'string' && actual.startsWith(prefix);
+    }
+    return actual === expected;
+  });
+}
+
 function createRepoMock(seed: Account[] = []) {
   const store: Account[] = [...seed];
   let seq = 0;
@@ -33,12 +58,32 @@ function createRepoMock(seed: Account[] = []) {
   return {
     _store: store,
     find: vi.fn(async () => store.map((a) => a)),
-    findOne: vi.fn(async (options: { where?: Record<string, unknown> }) => {
-      const where = options?.where ?? {};
-      if (where.id) return store.find((a) => a.id === where.id) ?? null;
-      if (where.code) return store.find((a) => a.code === where.code) ?? null;
-      return null;
-    }),
+    findOne: vi.fn(
+      async (options: {
+        where?: Record<string, unknown>;
+        order?: Record<string, unknown>;
+      }) => {
+        const where = options?.where ?? {};
+        let matched = store.filter((account) => matchesWhere(account, where));
+
+        // Tôn trọng `order` (mock đơn giản: một cột) để test đúng "mã nhỏ nhất".
+        const [field, direction] = Object.entries(options?.order ?? {})[0] ?? [];
+        if (field && (direction === 'ASC' || direction === 'DESC')) {
+          matched = [...matched].sort((a, b) => {
+            const left = String(
+              (a as unknown as Record<string, unknown>)[field] ?? '',
+            );
+            const right = String(
+              (b as unknown as Record<string, unknown>)[field] ?? '',
+            );
+            const cmp = left.localeCompare(right, 'en');
+            return direction === 'ASC' ? cmp : -cmp;
+          });
+        }
+
+        return matched[0] ?? null;
+      },
+    ),
     count: vi.fn(
       async (options: { where?: { parentId?: string } }) =>
         store.filter((a) => a.parentId === options?.where?.parentId).length,
@@ -183,6 +228,43 @@ describe('AccountsService', () => {
 
       await built.service.remove('a');
       expect(repo._store).toHaveLength(0);
+    });
+  });
+
+  describe('findOneByCodePattern', () => {
+    it('trả về tài khoản lá có mã nhỏ nhất khớp tiền tố', async () => {
+      const built = buildService([
+        makeAccount({ id: 'a', code: '1312' }),
+        makeAccount({ id: 'b', code: '131' }),
+        makeAccount({ id: 'c', code: '331' }),
+      ]);
+
+      const account = await built.service.findOneByCodePattern('131');
+      expect(account?.id).toBe('b');
+    });
+
+    it('bỏ qua tài khoản tổng hợp và tài khoản đã ngừng sử dụng', async () => {
+      const built = buildService([
+        makeAccount({ id: 'parent', code: '131', isPostable: false }),
+        makeAccount({ id: 'inactive', code: '1312', isActive: false }),
+        makeAccount({ id: 'leaf', code: '1311' }),
+      ]);
+
+      const account = await built.service.findOneByCodePattern('131');
+      expect(account?.id).toBe('leaf');
+    });
+
+    it('trả null khi không có tài khoản nào khớp tiền tố', async () => {
+      const built = buildService([makeAccount({ id: 'a', code: '111' })]);
+
+      await expect(built.service.findOneByCodePattern('131')).resolves.toBeNull();
+    });
+
+    it('trả null và không truy vấn khi tiền tố rỗng', async () => {
+      const built = buildService([makeAccount({ id: 'a', code: '111' })]);
+
+      await expect(built.service.findOneByCodePattern('   ')).resolves.toBeNull();
+      expect(built.repo.findOne).not.toHaveBeenCalled();
     });
   });
 

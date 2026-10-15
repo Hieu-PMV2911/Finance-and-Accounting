@@ -72,7 +72,8 @@ import { UsersModule } from './users/users.module.js';
     AuthModule,
     UsersModule,
     AccountsModule,
-    // Mục 10.0 — đối tượng (khách hàng / nhà cung cấp) cho sổ cái phụ.    PartiesModule,
+    // Mục 10.0 — đối tượng (khách hàng / nhà cung cấp) cho sổ cái phụ.
+    PartiesModule,
     SalesInvoicesModule,
     VendorBillsModule,
     // Mục 10.0 — phân bổ thanh toán giữa chứng từ đích và nguồn.

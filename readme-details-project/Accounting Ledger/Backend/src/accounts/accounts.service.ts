@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Like, Repository } from 'typeorm';
 
 import { normalBalanceOf } from '../common/enums/account-type.enum.js';
 import type { CreateAccountDto } from './dto/create-account.dto.js';
@@ -96,6 +96,25 @@ export class AccountsService {
       throw new NotFoundException('Không tìm thấy tài khoản');
     }
     return account;
+  }
+
+  /**
+   * Tài khoản **lá, đang hoạt động** đầu tiên có mã bắt đầu bằng `prefix`.
+   *
+   * Dùng để lấy tài khoản mặc định theo tiền tố TT200 (vd `131` phải thu khách hàng,
+   * `331` phải trả người bán) mà **không hardcode id** — xem mục 10.0 của
+   * `EXTENSION_PLAN.md`. Trả `null` khi chưa cấu hình, để nơi gọi tự quyết định
+   * thông báo lỗi.
+   */
+  async findOneByCodePattern(prefix: string): Promise<Account | null> {
+    const code = prefix.trim();
+    if (!code) {
+      return null;
+    }
+    return this.accounts.findOne({
+      where: { code: Like(`${code}%`), isPostable: true, isActive: true },
+      order: { code: 'ASC' },
+    });
   }
 
   /**

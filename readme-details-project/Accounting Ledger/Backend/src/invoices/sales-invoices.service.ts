@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -9,11 +8,17 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
 import { AccountsService } from '../accounts/accounts.service.js';
-import { InvoiceStatus, isInvoiceImmutable } from '../common/enums/invoice-status.enum.js';
+import type { Account } from '../accounts/entities/account.entity.js';
+import {
+  INVOICE_STATUS_LABELS,
+  InvoiceStatus,
+  isInvoiceImmutable,
+} from '../common/enums/invoice-status.enum.js';
 import { SourceType } from '../common/enums/source-type.enum.js';
 import { moneyToString, sumMoney, toMoney } from '../common/utils/money.util.js';
 import { isPartyAccount, partyAccountMessage } from '../common/utils/party-account.util.js';
 import { FiscalPeriodsService } from '../fiscal-periods/fiscal-periods.service.js';
+import type { CreateJournalLineDto } from '../journals/dto/create-journal-line.dto.js';
 import { JournalsService } from '../journals/journals.service.js';
 import { PartiesService } from '../parties/parties.service.js';
 import type { CreateSalesInvoiceDto } from './dto/create-sales-invoice.dto.js';
@@ -134,7 +139,9 @@ export class SalesInvoicesService {
     return this.findById(saved.id);
   }
 
-  async update(id: string, dto: UpdateSalesInvoiceDto, actorId: string): Promise<SalesInvoice> {
+  // `_actorId` chưa dùng: vết thay đổi do `AuditSubscriber` ghi tự động theo ngữ cảnh
+  // request. Giữ tham số để chữ ký khớp controller và P1.2 (duyệt/ghi sổ) dùng lại.
+  async update(id: string, dto: UpdateSalesInvoiceDto, _actorId: string): Promise<SalesInvoice> {
     const invoice = await this.findById(id);
     if (isInvoiceImmutable(invoice.status)) {
       throw new ForbiddenException('Không thể sửa hóa đơn đã ghi sổ hoặc đã hủy');
@@ -180,54 +187,42 @@ export class SalesInvoicesService {
 
   async post(id: string, actorId: string): Promise<SalesInvoice> {
     const invoice = await this.findById(id);
-    if (invoice.status === InvoiceStatus.POSTED) {
-      throw new BadRequestException('Hóa đơn đã được ghi sổ');
-    }
-    if (invoice.status === InvoiceStatus.VOIDED) {
-      throw new BadRequestException('Hóa đơn đã bị hủy');
-    }
-    if (invoice.status === InvoiceStatus.DRAFT) {
-      // could auto-approve? but follow RBAC pattern - but for API simplicity, allow posting if approved? let us check - per journal lifecycle, need approved then posted; but maybe for this minimal impl, allow if draft? or require approved. Let us be lenient.
+
+    // Vòng đời mục 10.A: draft | approved ──post──▶ posted.
+    // (P1.2 của `MUC-10-TIEP-THEO.md` sẽ bổ sung bước `approved` + endpoint approve;
+    // khi đó chỉ hóa đơn đã xác nhận mới ghi sổ được.)
+    if (
+      invoice.status !== InvoiceStatus.DRAFT &&
+      invoice.status !== InvoiceStatus.APPROVED
+    ) {
+      throw new BadRequestException(
+        `Hóa đơn đang ở trạng thái "${INVOICE_STATUS_LABELS[invoice.status]}" — chỉ hóa đơn nháp hoặc đã xác nhận mới ghi sổ được`,
+      );
     }
 
-    // Determine receivable account (party account) - default to 131 if not specified
-    let receivableAccountId = invoice.receivableAccountId;
-    if (!receivableAccountId) {
-      // Try to find an active receivable account starting with 131
-      const acc = await this.accounts.findOneByCodePattern('131');
-      if (!acc) {
-        throw new BadRequestException('Không tìm thấy tài khoản phải thu (131*) để ghi sổ hóa đơn');
-      }
-      receivableAccountId = acc.id;
+    // Tài khoản phải thu (công nợ khách hàng): ưu tiên tài khoản đã khai trên hóa đơn,
+    // nếu chưa khai thì lấy tài khoản lá 131* đang hoạt động.
+    const receivableAccount = invoice.receivableAccountId
+      ? await this.accounts.getPostable(invoice.receivableAccountId)
+      : await this.requireControlAccount('131', 'phải thu khách hàng (131*)');
+    if (!isPartyAccount(receivableAccount.code)) {
+      throw new BadRequestException(partyAccountMessage(receivableAccount.code));
     }
 
-    // Validate receivable is party account
-    const recAcc = await this.accounts.getPostable(receivableAccountId);
-    if (!isPartyAccount(recAcc.code)) {
-      throw new BadRequestException(partyAccountMessage(recAcc.code));
-    }
-
-    // Ensure fiscal period open
+    // Bất biến số 3: chỉ kỳ đang mở mới nhận bút toán.
     const period = await this.periods.resolveByDate(invoice.date);
-    await this.periods.assertAcceptsPostings(period.id);
+    this.periods.assertAcceptsPostings(period);
 
     const lines = invoice.lines || [];
     if (lines.length === 0) {
       throw new BadRequestException('Hóa đơn không có dòng');
     }
 
-    // Build journal entry: Dr Receivable (party) for total, Cr Revenue per line
-    const journalLines: Array<{
-      accountId: string;
-      debit?: string;
-      credit?: string;
-      partyId?: string | null;
-      description?: string | null;
-    }> = [];
+    // Bút toán: Nợ tài khoản phải thu (kèm đối tượng) / Có doanh thu theo từng dòng.
+    const journalLines: CreateJournalLineDto[] = [];
 
-    // Debit receivable with party
     journalLines.push({
-      accountId: receivableAccountId,
+      accountId: receivableAccount.id,
       debit: moneyToString(invoice.total),
       partyId: invoice.partyId,
       description: invoice.description ?? `Hóa đơn ${invoice.invoiceNo}`,
@@ -249,7 +244,7 @@ export class SalesInvoicesService {
         reference: invoice.invoiceNo,
         sourceType: SourceType.SALES_INVOICE,
         sourceId: invoice.id,
-        lines: journalLines as any,
+        lines: journalLines,
       },
       actorId,
     );
@@ -261,9 +256,24 @@ export class SalesInvoicesService {
     invoice.journalEntryId = posted.id;
     invoice.postedBy = actorId;
     invoice.postedAt = new Date();
-    invoice.receivableAccountId = receivableAccountId;
+    invoice.receivableAccountId = receivableAccount.id;
 
     await this.invoices.save(invoice);
     return invoice;
+  }
+
+  /**
+   * Lấy tài khoản công nợ để ghi sổ theo tiền tố mã.
+   * Chặn khi chưa cấu hình tài khoản (không im lặng bỏ qua) và chỉ nhận tài khoản
+   * **lá, đang hoạt động** qua `AccountsService.getPostable`.
+   */
+  private async requireControlAccount(prefix: string, label: string): Promise<Account> {
+    const found = await this.accounts.findOneByCodePattern(prefix);
+    if (!found) {
+      throw new BadRequestException(
+        `Không tìm thấy tài khoản ${label} để ghi sổ chứng từ`,
+      );
+    }
+    return this.accounts.getPostable(found.id);
   }
 }

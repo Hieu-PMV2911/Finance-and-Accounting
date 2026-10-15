@@ -8,7 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';

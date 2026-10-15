@@ -8,11 +8,17 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
 import { AccountsService } from '../accounts/accounts.service.js';
-import { BillStatus, isBillImmutable } from '../common/enums/bill-status.enum.js';
+import type { Account } from '../accounts/entities/account.entity.js';
+import {
+  BILL_STATUS_LABELS,
+  BillStatus,
+  isBillImmutable,
+} from '../common/enums/bill-status.enum.js';
 import { SourceType } from '../common/enums/source-type.enum.js';
 import { moneyToString, sumMoney, toMoney } from '../common/utils/money.util.js';
 import { isPartyAccount, partyAccountMessage } from '../common/utils/party-account.util.js';
 import { FiscalPeriodsService } from '../fiscal-periods/fiscal-periods.service.js';
+import type { CreateJournalLineDto } from '../journals/dto/create-journal-line.dto.js';
 import { JournalsService } from '../journals/journals.service.js';
 import { PartiesService } from '../parties/parties.service.js';
 import type { CreateVendorBillDto } from './dto/create-vendor-bill.dto.js';
@@ -108,7 +114,9 @@ export class VendorBillsService {
     return this.findById(saved.id);
   }
 
-  async update(id: string, dto: UpdateVendorBillDto, actorId: string): Promise<VendorBill> {
+  // `_actorId` chưa dùng: vết thay đổi do `AuditSubscriber` ghi tự động theo ngữ cảnh
+  // request. Giữ tham số để chữ ký khớp controller và P1.2 (duyệt/ghi sổ) dùng lại.
+  async update(id: string, dto: UpdateVendorBillDto, _actorId: string): Promise<VendorBill> {
     const bill = await this.findById(id);
     if (isBillImmutable(bill.status)) throw new ForbiddenException('Không thể sửa hóa đơn mua đã ghi sổ hoặc đã hủy');
 
@@ -148,26 +156,33 @@ export class VendorBillsService {
 
   async post(id: string, actorId: string): Promise<VendorBill> {
     const bill = await this.findById(id);
-    if (bill.status === BillStatus.POSTED) throw new BadRequestException('Hóa đơn mua đã được ghi sổ');
-    if (bill.status === BillStatus.VOIDED) throw new BadRequestException('Hóa đơn mua đã bị hủy');
 
-    let payableAccountId = bill.payableAccountId;
-    if (!payableAccountId) {
-      const acc = await this.accounts.findOneByCodePattern('331');
-      if (!acc) throw new BadRequestException('Không tìm thấy tài khoản phải trả (331*) để ghi sổ hóa đơn mua');
-      payableAccountId = acc.id;
+    // Vòng đời mục 10.A: draft | approved ──post──▶ posted.
+    // (P1.2 của `MUC-10-TIEP-THEO.md` sẽ bổ sung bước `approved` + endpoint approve;
+    // khi đó chỉ hóa đơn đã xác nhận mới ghi sổ được.)
+    if (bill.status !== BillStatus.DRAFT && bill.status !== BillStatus.APPROVED) {
+      throw new BadRequestException(
+        `Hóa đơn mua đang ở trạng thái "${BILL_STATUS_LABELS[bill.status]}" — chỉ hóa đơn nháp hoặc đã xác nhận mới ghi sổ được`,
+      );
     }
 
-    const payAcc = await this.accounts.getPostable(payableAccountId);
-    if (!isPartyAccount(payAcc.code)) throw new BadRequestException(partyAccountMessage(payAcc.code));
+    // Tài khoản phải trả (công nợ nhà cung cấp): ưu tiên tài khoản đã khai trên hóa đơn,
+    // nếu chưa khai thì lấy tài khoản lá 331* đang hoạt động.
+    const payableAccount = bill.payableAccountId
+      ? await this.accounts.getPostable(bill.payableAccountId)
+      : await this.requireControlAccount('331', 'phải trả người bán (331*)');
+    if (!isPartyAccount(payableAccount.code)) {
+      throw new BadRequestException(partyAccountMessage(payableAccount.code));
+    }
 
+    // Bất biến số 3: chỉ kỳ đang mở mới nhận bút toán.
     const period = await this.periods.resolveByDate(bill.date);
-    await this.periods.assertAcceptsPostings(period.id);
+    this.periods.assertAcceptsPostings(period);
 
     const lines = bill.lines || [];
     if (lines.length === 0) throw new BadRequestException('Hóa đơn mua không có dòng');
 
-    const journalLines: Array<any> = [];
+    const journalLines: CreateJournalLineDto[] = [];
     // Debit expense lines
     for (const line of lines) {
       journalLines.push({
@@ -178,7 +193,7 @@ export class VendorBillsService {
     }
     // Credit payable with party
     journalLines.push({
-      accountId: payableAccountId,
+      accountId: payableAccount.id,
       credit: moneyToString(bill.total),
       partyId: bill.partyId,
       description: bill.description ?? `Hóa đơn mua ${bill.billNo}`,
@@ -202,9 +217,24 @@ export class VendorBillsService {
     bill.journalEntryId = posted.id;
     bill.postedBy = actorId;
     bill.postedAt = new Date();
-    bill.payableAccountId = payableAccountId;
+    bill.payableAccountId = payableAccount.id;
 
     await this.bills.save(bill);
     return bill;
+  }
+
+  /**
+   * Lấy tài khoản công nợ để ghi sổ theo tiền tố mã.
+   * Chặn khi chưa cấu hình tài khoản (không im lặng bỏ qua) và chỉ nhận tài khoản
+   * **lá, đang hoạt động** qua `AccountsService.getPostable`.
+   */
+  private async requireControlAccount(prefix: string, label: string): Promise<Account> {
+    const found = await this.accounts.findOneByCodePattern(prefix);
+    if (!found) {
+      throw new BadRequestException(
+        `Không tìm thấy tài khoản ${label} để ghi sổ chứng từ`,
+      );
+    }
+    return this.accounts.getPostable(found.id);
   }
 }
