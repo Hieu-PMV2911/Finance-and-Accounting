@@ -78,7 +78,8 @@ không được mount ⇒ `/api/parties*` **không tồn tại** dù code có. `
 - FE: chưa có `features/invoices`, `features/bills`, `features/payments`, `features/reconciliation`.
   Hiện có: `accounts, audit, auth, dashboard, jobs, journals, ledger, notifications, parties, periods, profile, reports, users, webhooks`.
   → **Đã xử lý ở P1.6**: `invoices`, `bills`, `payments`, `receivables` + `documents` (component dùng chung).
-  Còn thiếu: `reconciliation` và `payment-intents` (đều thuộc P2).
+  ✅ **P2.1** đã có backend `payment-intents` + `reconciliation-exceptions`; còn thiếu FE `payment-intents`,
+  và FE/backend sao kê–đối soát `reconciliation` (P2.2/P2.3).
 - Test: chưa có spec cho `invoices`, `bills`, `parties`, `allocations`.
 
 ---
@@ -288,19 +289,75 @@ chạy `vite` thật và thao tác qua các luồng:
 
 ## 5. Giai đoạn P2 — 10.B Payment & Reconciliation
 
-### P2.1 Vòng đời thanh toán (quyết định #6 của `EXTENSION_PLAN.md`)
+### P2.1 Vòng đời thanh toán (quyết định #6 của `EXTENSION_PLAN.md`) ✅ HOÀN THÀNH
 
-- [ ] `payment_intents`: `idempotencyKey` (unique), `amount`, `currency`, `method`, `partyId`/`invoiceId`
-      (tùy chọn), `status`, `providerRef`, `attempts`, `lastCheckedAt`.
-- [ ] Trạng thái: `initiated → authorized → captured → settled`, nhánh `failed`/`refunded`/`expired`, và
-      **`unknown`/`pending_verification`** — timeout ** KHÔNG** đồng nghĩa thất bại.
-- [ ] Hàng đợi BullMQ thứ 5 `payments` + cron `payment-status-poll` (2 phút) tra cứu provider theo đúng
-      `idempotencyKey` cho tới khi có kết luận; ngưỡng leo thang sau N lần ⇒ thông báo + exception,
-      **không tự suy diễn** kết quả.
-- [ ] `payment-provider-simulator` (chỉ dev): cố tình timeout lần gọi đầu, "đã thu tiền" ở lần tra cứu sau.
-- [ ] Bộ điều phối webhook: `payment.captured` ⇒ intent `captured` + **ghi sổ** (`source_type =
-      provider_event`, `source_id = event.id`) trong cùng transaction.
-- [ ] Kết quả **đến trễ** mâu thuẫn trạng thái cuối ⇒ **không ghi đè**, sinh `reconciliation_exception`.
+- [x] `payment_intents`: `idempotencyKey` (unique), `code`, `date` (ngày hạch toán), `amount`,
+      `currency`, `method`, `direction`, `partyId`/`invoiceId` (tùy chọn), `status`, `provider`,
+      `providerRef`, `providerStatus`, `attempts`, `lastCheckedAt`, `escalationNotifiedAt`,
+      `journalEntryId`, `capturedAt`, `settledAt`.
+- [x] Trạng thái: `initiated → authorized → captured → settled`, nhánh `failed`/`refunded`/`expired`, và
+      **`unknown`** — timeout **KHÔNG** đồng nghĩa thất bại.
+- [x] Hàng đợi BullMQ thứ 5 `payments` + cron `payment-status-poll` (2 phút) tra cứu provider theo đúng
+      `idempotencyKey`; ngưỡng leo thang (`PAYMENT_INTENT_MAX_POLLS`, mặc định 5) ⇒ ngoại lệ
+      `unresolved_provider_status` + thông báo cho `poster`/`admin`, rồi **ngừng** tra cứu tự động.
+      **Không tự suy diễn** kết quả.
+- [x] `payment-provider-simulator` (chỉ dev): cố tình timeout lần gọi đầu, "đã thu tiền" ở lần tra cứu sau.
+      `PAYMENT_PROVIDER=disabled` là mặc định; đặt `simulator` ở production ⇒ **lỗi khởi động**.
+- [x] Bộ điều phối webhook: `payment.captured` ⇒ intent `captured` + **ghi sổ** (`source_type =
+      provider_event`) trong cùng transaction. Handler đăng ký qua `WebhooksService.registerInboundHandler`
+      để tầng webhook không phụ thuộc ngược vào payment-intents.
+- [x] Kết quả **đến trễ** mâu thuẫn trạng thái cuối ⇒ **không ghi đè**, sinh `reconciliation_exception`.
+
+**Quyết định kỹ thuật đã kiểm chứng (ghi lại để không mất dấu):**
+
+- **`source_id = intent.id`, không phải event id.** `UNIQUE(source_type, source_id)` là lá chắn duy nhất
+  bảo đảm *một bút toán cho một intent*, kể cả khi webhook và cron cùng lúc thấy "đã thu tiền". Nếu dùng
+  event id, hai sự kiện khác nhau của cùng intent sẽ sinh hai bút toán — đúng thứ cần chặn. Event id vẫn
+  được lưu trong ngoại lệ/vết.
+- **Preflight trước khi gọi provider.** Kỳ kế toán phải mở, tài khoản tiền và tài khoản công nợ phải giải
+  được **trước** khi `charge`. Đã thu tiền rồi mới phát hiện không hạch toán được là tình huống không có
+  đường sửa sạch.
+- **Ngày hạch toán tách khỏi thời điểm thu tiền.** `payment_intents.date` quyết định kỳ của bút toán
+  (mặc định hôm nay); nhờ vậy thu tiền cuối tháng có thể hạch toán theo ngày kế toán chọn.
+- **Handler nghiệp vụ chạy trước khi lưu `webhook_events`.** Handler lỗi ⇒ chưa có bản ghi, bên gửi nhận
+  5xx và retry; mọi thao tác áp kết quả đều idempotent nên retry an toàn. Sự kiện "đến trễ" vẫn được
+  chuyển cho nghiệp vụ — chính nó biết là mâu thuẫn cần ngoại lệ hay chỉ là bản cập nhật cũ vô hại.
+- **Số tiền trong webhook được đối chiếu.** Lệch với intent ⇒ **không ghi sổ** theo payload, sinh ngoại lệ
+  `amount_mismatch`.
+- **Bút toán do hệ thống tạo mang `SYSTEM_ACTOR_ID` (UUID rỗng)**, không mượn danh người lập. Vết kiểm
+  toán phải nói đúng sự thật: không có con người bấm nút.
+- **`PaymentPollRegistry`** để worker `payments` gọi nghiệp vụ thanh toán mà `JobsModule` không phải import
+  `PaymentIntentsModule` (module kia đã import `JobsModule`). Module thanh toán tự đăng ký lúc khởi động.
+
+**API:** `GET/POST /api/payment-intents`, `GET /api/payment-intents/:id`,
+`POST /api/payment-intents/:id/poll` (admin/poster), `POST /api/payment-intents/:id/settle`,
+`GET /api/reconciliation-exceptions`, `GET /:id`, `POST /:id/resolve`, `POST /:id/ignore`.
+
+**Kiểm thử:** `payment-intents.service.spec.ts` (11 test) — timeout ⇒ `unknown` và **không** ghi sổ;
+  timeout → captured ghi sổ **đúng một** bút toán với `source_id = intent.id`; poll lại khi đã captured
+  không ghi sổ lần hai; webhook captured lặp lại chỉ một bút toán; kết quả đến trễ không ghi đè + sinh
+  `late_event_conflict`; lệch tiền sinh `amount_mismatch`; quá ngưỡng leo thang **một lần** rồi dừng;
+  kỳ đã khóa chặn **trước** khi gọi provider; cùng `idempotencyKey` không gọi provider lần hai.
+
+**Nghiệm thu P2.1 — trạng thái thật:**
+
+| Tiêu chí | Kết quả |
+| -------- | ------- |
+| `tsc --noEmit` · `oxlint` · `vitest` · `nest build` | ✅ exit 0 · 0 warning/0 error · **206/206** · exit 0 |
+| Kịch bản "provider timeout ở lần gọi đầu" ⇒ cuối cùng `captured` + **đúng một** bút toán | ✅ unit test (simulator + mock repo); **chưa** chạy end-to-end với PostgreSQL |
+| Webhook `payment.captured` ⇒ intent `captured` + bút toán trong cùng transaction | ✅ unit test (commit của `postDocument` cập nhật intent); chưa chạy HTTP thật |
+| Leo thang sau N lần ⇒ ngoại lệ + thông báo, dừng tra cứu | ✅ unit test |
+| Kết quả đến trễ không ghi đè | ✅ unit test |
+| Chạy một mạch qua HTTP với DB thật (tạo intent → cron → webhook → sổ) | ⛔ **CHƯA kiểm chứng** — máy dev không có PostgreSQL (như P0/P1). Phải chạy lại khi có DB. |
+
+**Việc còn lại của 10.B:** P2.2 sao kê ngân hàng (`bank_transactions`/`bank_statements`, adapter CSV/API)
+và P2.3 khớp 3 tầng + cron `reconciliation-catchup` + dead-letter queue; FE `/payment-intents` và
+`/reconciliation`. Khi thêm giá trị enum mới cho Postgres (`synchronize: false`) phải chạy:
+`ALTER TYPE payment_intent_status_enum ADD VALUE 'unknown';`
+`ALTER TYPE reconciliation_exception_type_enum ADD VALUE 'late_event_conflict';` /
+`'unresolved_provider_status';`
+`ALTER TYPE reconciliation_exception_status_enum ADD VALUE 'open';` / `'resolved';` / `'ignored';`
+(chỉ các giá trị chưa có — enum mới do TypeORM tạo ở lần `synchronize` đầu).
 
 ### P2.2 Mô hình giao dịch ngân hàng thống nhất (quyết định #4)
 
@@ -369,7 +426,7 @@ Làm **theo thứ tự này**, mỗi phần một migration riêng.
 | Hóa đơn mua | đối xứng | ✅ `features/bills` (P1.6) |
 | Phiếu thu/chi | danh sách + form + **UI phân bổ** vào hóa đơn | ✅ `features/payments` (P1.6) |
 | Công nợ | công nợ hiện tại + aging theo đối tượng | ✅ `features/receivables` (P1.6) |
-| Thanh toán | intent + trạng thái + nút tra cứu lại | ⏳ `features/payment-intents` — chờ P2.1 |
+| Thanh toán | intent + trạng thái + nút tra cứu lại | ⏳ `features/payment-intents` — backend P2.1 đã xong |
 | Đối soát | nhập sao kê, bảng khớp, danh sách lệch + xử lý | ⏳ `features/reconciliation` — chờ P2.2/P2.3 |
 
 Component dùng chung cho chứng từ: `features/documents/` — `LineItemsEditor` (dòng hàng, thành tiền dẫn xuất),

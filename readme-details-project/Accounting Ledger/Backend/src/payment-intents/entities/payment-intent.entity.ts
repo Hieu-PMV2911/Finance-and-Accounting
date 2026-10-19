@@ -65,6 +65,14 @@ export class PaymentIntent {
   @Column({ name: 'invoice_id', type: 'uuid', nullable: true })
   invoiceId: string | null;
 
+  /**
+   * Ngày hạch toán (YYYY-MM-DD) — ngày bút toán sẽ vào sổ khi tiền được thu.
+   * Tách khỏi `capturedAt` vì kế toán có thể chọn ngày ghi sổ khác thời điểm
+   * provider xác nhận (vd thu tiền cuối tháng nhưng hạch toán đầu tháng sau).
+   */
+  @Column({ type: 'date' })
+  date: string;
+
   @Column({ type: 'numeric', precision: 19, scale: 4 })
   amount: string;
 

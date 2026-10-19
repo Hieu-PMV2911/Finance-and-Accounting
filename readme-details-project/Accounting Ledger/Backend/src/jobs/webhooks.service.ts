@@ -18,6 +18,10 @@ import type { CreateWebhookEndpointDto } from './dto/create-webhook-endpoint.dto
 import type { EmitWebhookEventDto } from './dto/emit-webhook-event.dto.js';
 import type { QueryWebhookDeliveriesDto } from './dto/query-webhook-deliveries.dto.js';
 import type { UpdateWebhookEndpointDto } from './dto/update-webhook-endpoint.dto.js';
+import type {
+  InboundWebhookHandler,
+  InboundWebhookHandlerInput,
+} from './interfaces/inbound-webhook.interface.js';
 import { WebhookDelivery } from './entities/webhook-delivery.entity.js';
 import { WebhookEndpoint } from './entities/webhook-endpoint.entity.js';
 import { WebhookEvent } from './entities/webhook-event.entity.js';
@@ -131,6 +135,14 @@ const MAX_RESPONSE_BODY = 2_000;
 export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
 
+  /**
+   * Handler nghiệp vụ theo `eventType` — đăng ký từ module sở hữu dữ liệu.
+   *
+   * Map (không phải mảng) vì mỗi loại sự kiện chỉ nên có **một** nơi xử lý;
+   * hai nơi cùng áp một sự kiện là hai nguồn sự thật, đúng thứ mục 10.B tránh.
+   */
+  private readonly inboundHandlers = new Map<string, InboundWebhookHandler>();
+
   constructor(
     @InjectRepository(WebhookEndpoint)
     private readonly endpoints: Repository<WebhookEndpoint>,
@@ -140,6 +152,19 @@ export class WebhooksService {
     private readonly events: Repository<WebhookEvent>,
     private readonly queue: QueueService,
   ) {}
+
+  /**
+   * Đăng ký xử lý nghiệp vụ cho một loại sự kiện nhận vào.
+   *
+   * Gọi ở `onModuleInit` của module nghiệp vụ. Đăng ký lại cùng `eventType` sẽ
+   * ghi đè — có chủ đích để test có thể thay handler.
+   */
+  registerInboundHandler(
+    eventType: string,
+    handler: InboundWebhookHandler,
+  ): void {
+    this.inboundHandlers.set(eventType, handler);
+  }
 
   // ------------------------------------------------------------- endpoint
 
@@ -615,16 +640,28 @@ export class WebhooksService {
       order: { occurredAt: 'DESC' },
     });
 
-    if (newer) {
-      return this.storeEvent({
+    const lateReason = newer
+      ? `Đã có sự kiện mới hơn cho "${resourceRef}" (${newer.externalId} lúc ${newer.occurredAt.toISOString()})`
+      : null;
+
+    // Nghiệp vụ chạy **trước** khi lưu: handler lỗi ⇒ chưa có bản ghi, bên gửi
+    // retry; mọi thao tác áp kết quả đều idempotent nên retry an toàn.
+    // Sự kiện "đến trễ" vẫn được áp: chính nghiệp vụ biết đó là mâu thuẫn cần
+    // ghi ngoại lệ hay chỉ là bản cập nhật cũ vô hại.
+    const handler = this.inboundHandlers.get(eventType);
+    if (handler) {
+      const outcome = await handler({
         externalId,
         eventType,
         resourceRef,
         occurredAt: parsedOccurredAt,
-        status: WebhookEventStatus.LATE,
-        reason: `Đã có sự kiện mới hơn cho "${resourceRef}" (${newer.externalId} lúc ${newer.occurredAt.toISOString()})`,
         payload,
-      });
+      } satisfies InboundWebhookHandlerInput);
+      if (outcome.note) {
+        this.logger.log(
+          `Webhook ${eventType} (${externalId}): ${outcome.note}`,
+        );
+      }
     }
 
     return this.storeEvent({
@@ -632,8 +669,8 @@ export class WebhooksService {
       eventType,
       resourceRef,
       occurredAt: parsedOccurredAt,
-      status: WebhookEventStatus.PROCESSED,
-      reason: null,
+      status: lateReason ? WebhookEventStatus.LATE : WebhookEventStatus.PROCESSED,
+      reason: lateReason,
       payload,
     });
   }

@@ -43,6 +43,12 @@ import { AccountBalance } from './ledger/entities/account-balance.entity.js';
 import { LedgerModule } from './ledger/ledger.module.js';
 import { LedgerService } from './ledger/ledger.service.js';
 import { Party } from './parties/entities/party.entity.js';
+import { PaymentIntent } from './payment-intents/entities/payment-intent.entity.js';
+import { ReconciliationException } from './payment-intents/entities/reconciliation-exception.entity.js';
+import { PAYMENT_PROVIDER } from './payment-intents/interfaces/payment-provider.interface.js';
+import { PaymentIntentsModule } from './payment-intents/payment-intents.module.js';
+import { PaymentIntentsService } from './payment-intents/payment-intents.service.js';
+import { DisabledPaymentProvider } from './payment-intents/providers/disabled-payment-provider.service.js';
 import { Payment } from './payments/entities/payment.entity.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { PaymentsService } from './payments/payments.service.js';
@@ -358,6 +364,38 @@ describe('Module wiring', () => {
     ).compile();
 
     expect(moduleRef.get(VendorBillsService)).toBeInstanceOf(VendorBillsService);
+    await moduleRef.close();
+  });
+
+  it('PaymentIntentsModule khởi tạo được PaymentIntentsService (provider disabled)', async () => {
+    const moduleRef = await withJobsTree(
+      Test.createTestingModule({
+        imports: [StubDataSourceModule, PaymentIntentsModule],
+      })
+        .overrideProvider(getRepositoryToken(PaymentIntent))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(ReconciliationException))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(Party))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(Account))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(AccountBalance))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(FiscalPeriod))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(JournalEntry))
+        .useValue({})
+        .overrideProvider(getRepositoryToken(JournalLine))
+        .useValue({})
+        // Không đọc `.env` trong test: chọn thẳng provider an toàn.
+        .overrideProvider(PAYMENT_PROVIDER)
+        .useValue(new DisabledPaymentProvider()),
+    ).compile();
+
+    expect(moduleRef.get(PaymentIntentsService)).toBeInstanceOf(
+      PaymentIntentsService,
+    );
     await moduleRef.close();
   });
 

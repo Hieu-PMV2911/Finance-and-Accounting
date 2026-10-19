@@ -43,6 +43,17 @@ export class CreatePaymentIntentDto {
   @IsUUID('4', { message: 'invoiceId không hợp lệ' })
   invoiceId?: string;
 
+  @ApiPropertyOptional({
+    example: '2026-10-19',
+    description:
+      'Ngày hạch toán (YYYY-MM-DD). Bỏ trống ⇒ hôm nay. Ngày này quyết định kỳ kế toán của bút toán khi tiền được thu.',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'date phải theo định dạng YYYY-MM-DD',
+  })
+  date?: string;
+
   @ApiProperty({ example: '1500000.0000' })
   @IsString()
   @Matches(MONEY_PATTERN, { message: MONEY_MESSAGE })

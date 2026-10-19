@@ -6,6 +6,7 @@ import {
   DEBT_REMINDER_CRON,
   INTEGRITY_CHECK_CRON,
   OVERDUE_INVOICE_SWEEP_CRON,
+  PAYMENT_STATUS_POLL_CRON,
   SchedulesService,
   WEBHOOK_SWEEP_CRON,
 } from './schedules.service.js';
@@ -55,5 +56,11 @@ export class JobsScheduler {
   @Cron(WEBHOOK_SWEEP_CRON)
   async scheduleWebhookSweep(): Promise<void> {
     await this.schedules.runScheduled('webhook-retry-sweep');
+  }
+
+  /** Mỗi 2 phút — tra cứu trạng thái thanh toán (mục 10.B). */
+  @Cron(PAYMENT_STATUS_POLL_CRON)
+  async schedulePaymentStatusPoll(): Promise<void> {
+    await this.schedules.runScheduled('payment-status-poll');
   }
 }

@@ -18,7 +18,9 @@ import { JobsScheduler } from './jobs.scheduler.js';
 import { NotificationsController } from './notifications.controller.js';
 import { NotificationsService } from './notifications.service.js';
 import { OverdueInvoiceSweepService } from './overdue-invoice-sweep.service.js';
+import { PaymentPollRegistry } from './payment-poll.registry.js';
 import { MaintenanceProcessor } from './processors/maintenance.processor.js';
+import { PaymentsProcessor } from './processors/payments.processor.js';
 import { NotificationsProcessor } from './processors/notifications.processor.js';
 import { ReportsProcessor } from './processors/reports.processor.js';
 import { WebhooksProcessor } from './processors/webhooks.processor.js';
@@ -31,7 +33,7 @@ import { WebhooksService } from './webhooks.service.js';
 /**
  * Xử lý bất đồng bộ (mục 9): **Queue (BullMQ) + Schedule (cron)**.
  *
- * Bốn hàng đợi, mỗi hàng một processor:
+ * Năm hàng đợi, mỗi hàng một processor:
  *
  * | Hàng đợi | Việc | Số lần thử |
  * |---|---|---|
@@ -39,6 +41,11 @@ import { WebhooksService } from './webhooks.service.js';
  * | `maintenance` | chốt số dư, kiểm tra bất biến, quét webhook treo | 3 |
  * | `notifications` | ghi thông báo, nhắc công nợ, quét hóa đơn quá hạn | 5 |
  * | `webhooks` | giao webhook ra ngoài | 5 |
+ * | `payments` | tra cứu trạng thái giao dịch tại provider (mục 10.B) | 3 |
+ *
+ * Worker `payments` gọi nghiệp vụ qua `PaymentPollRegistry`: module thanh toán
+ * đăng ký chính nó lúc khởi động, nên `JobsModule` không phải import
+ * `PaymentIntentsModule` (module kia đã import `JobsModule`).
  *
  * `BullModule.registerQueue` chỉ khai báo hàng đợi; kết nối Redis lấy từ
  * `BullModule.forRootAsync` trong `AppModule` nên cấu hình nằm một chỗ.
@@ -53,6 +60,7 @@ import { WebhooksService } from './webhooks.service.js';
       { name: JobQueue.MAINTENANCE },
       { name: JobQueue.NOTIFICATIONS },
       { name: JobQueue.WEBHOOKS },
+      { name: JobQueue.PAYMENTS },
     ),
     TypeOrmModule.forFeature([
       JobRun,
@@ -71,6 +79,7 @@ import { WebhooksService } from './webhooks.service.js';
     SchedulesService,
     ReportStorageService,
     JobsScheduler,
+    PaymentPollRegistry,
 
     // Nghiệp vụ chạy nền
     IntegrityService,
@@ -85,7 +94,14 @@ import { WebhooksService } from './webhooks.service.js';
     MaintenanceProcessor,
     NotificationsProcessor,
     WebhooksProcessor,
+    PaymentsProcessor,
   ],
-  exports: [NotificationsService, WebhooksService, QueueService],
+  exports: [
+    NotificationsService,
+    WebhooksService,
+    QueueService,
+    JobRunsService,
+    PaymentPollRegistry,
+  ],
 })
 export class JobsModule {}

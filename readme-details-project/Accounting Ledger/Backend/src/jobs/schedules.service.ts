@@ -32,6 +32,14 @@ export const INTEGRITY_CHECK_CRON = '30 2 * * *';
 export const DEBT_REMINDER_CRON = '0 8 * * 1';
 export const OVERDUE_INVOICE_SWEEP_CRON = '0 9 * * *';
 export const WEBHOOK_SWEEP_CRON = '*/5 * * * *';
+/**
+ * Mỗi 2 phút — tra cứu lại provider cho các giao dịch chưa kết luận.
+ *
+ * Nhịp 2 phút là điểm cân bằng: đủ nhanh để ghi sổ gần thời điểm thu tiền,
+ * đủ thưa để provider đang sự cố không bị gọi liên tục (ngưỡng leo thang sẽ
+ * dừng hẳn sau N lần).
+ */
+export const PAYMENT_STATUS_POLL_CRON = '*/2 * * * *';
 
 export const SCHEDULE_DEFINITIONS: readonly ScheduleDefinition[] = [
   {
@@ -73,6 +81,16 @@ export const SCHEDULE_DEFINITIONS: readonly ScheduleDefinition[] = [
     queue: JobQueue.NOTIFICATIONS,
     jobName: JobName.OVERDUE_INVOICE_SWEEP,
     payload: {},
+  },
+  {
+    name: 'payment-status-poll',
+    label: 'Tra cứu trạng thái thanh toán',
+    description:
+      'Tra cứu lại nhà cung cấp thanh toán theo đúng idempotencyKey cho các giao dịch chưa có kết luận. Đã thu tiền ⇒ ghi sổ đúng một lần; quá ngưỡng ⇒ leo thang cho người ghi sổ, không tự suy diễn thất bại.',
+    cron: PAYMENT_STATUS_POLL_CRON,
+    queue: JobQueue.PAYMENTS,
+    jobName: JobName.PAYMENT_STATUS_POLL,
+    payload: { limit: 50 },
   },
   {
     name: 'webhook-retry-sweep',

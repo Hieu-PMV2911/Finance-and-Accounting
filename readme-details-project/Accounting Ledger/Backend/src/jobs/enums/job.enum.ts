@@ -14,6 +14,12 @@ export enum JobQueue {
   NOTIFICATIONS = 'notifications',
   /** Gọi webhook ra hệ thống ngoài, có retry + backoff. */
   WEBHOOKS = 'webhooks',
+  /**
+   * Tra cứu lại trạng thái giao dịch tại nhà cung cấp thanh toán (mục 10.B).
+   * Tách khỏi `notifications` để có nhịp riêng (2 phút) và không đội nhịp các
+   * job nhắc nợ/quét hóa đơn.
+   */
+  PAYMENTS = 'payments',
 }
 
 export const ALL_JOB_QUEUES: readonly JobQueue[] = Object.values(JobQueue);
@@ -23,6 +29,7 @@ export const JOB_QUEUE_LABELS: Record<JobQueue, string> = {
   [JobQueue.MAINTENANCE]: 'Bảo trì định kỳ',
   [JobQueue.NOTIFICATIONS]: 'Gửi thông báo',
   [JobQueue.WEBHOOKS]: 'Webhook',
+  [JobQueue.PAYMENTS]: 'Trạng thái thanh toán',
 };
 
 /** Tên job bên trong từng hàng đợi. */
@@ -43,6 +50,8 @@ export enum JobName {
   DELIVER_WEBHOOK = 'deliver-webhook',
   /** `maintenance`: quét các lần giao webhook bị treo (mất job) rồi đẩy lại. */
   WEBHOOK_SWEEP = 'webhook-sweep',
+  /** `payments`: tra cứu provider cho các intent chưa có kết luận (mục 10.B). */
+  PAYMENT_STATUS_POLL = 'payment-status-poll',
 }
 
 export const ALL_JOB_NAMES: readonly JobName[] = Object.values(JobName);

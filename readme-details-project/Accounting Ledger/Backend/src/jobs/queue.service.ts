@@ -36,6 +36,7 @@ const DEFAULT_ATTEMPTS: Record<JobQueue, number> = {
   [JobQueue.MAINTENANCE]: 3,
   [JobQueue.NOTIFICATIONS]: 5,
   [JobQueue.WEBHOOKS]: 5,
+  [JobQueue.PAYMENTS]: 3,
 };
 
 /** Độ trễ backoff cơ sở (ms) — BullMQ nhân dần theo cấp số nhân. */
@@ -44,6 +45,7 @@ const BACKOFF_DELAY: Record<JobQueue, number> = {
   [JobQueue.MAINTENANCE]: 10_000,
   [JobQueue.NOTIFICATIONS]: 2_000,
   [JobQueue.WEBHOOKS]: 3_000,
+  [JobQueue.PAYMENTS]: 30_000,
 };
 
 const EMPTY_COUNTS: QueueCounts = {
@@ -73,12 +75,14 @@ export class QueueService {
     @InjectQueue(JobQueue.MAINTENANCE) maintenanceQueue: Queue,
     @InjectQueue(JobQueue.NOTIFICATIONS) notificationsQueue: Queue,
     @InjectQueue(JobQueue.WEBHOOKS) webhooksQueue: Queue,
+    @InjectQueue(JobQueue.PAYMENTS) paymentsQueue: Queue,
   ) {
     this.queues = new Map<JobQueue, Queue>([
       [JobQueue.REPORTS, reportsQueue],
       [JobQueue.MAINTENANCE, maintenanceQueue],
       [JobQueue.NOTIFICATIONS, notificationsQueue],
       [JobQueue.WEBHOOKS, webhooksQueue],
+      [JobQueue.PAYMENTS, paymentsQueue],
     ]);
   }
 

@@ -23,6 +23,7 @@ import { JobsModule } from './jobs/jobs.module.js';
 import { JournalsModule } from './journals/journals.module.js';
 import { LedgerModule } from './ledger/ledger.module.js';
 import { PartiesModule } from './parties/parties.module.js';
+import { PaymentIntentsModule } from './payment-intents/payment-intents.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -91,6 +92,8 @@ import { UsersModule } from './users/users.module.js';
     AuditModule,
     // Mục 9 — xử lý bất đồng bộ: hàng đợi BullMQ + lịch cron
     JobsModule,
+    // Mục 10.B — vòng đời thanh toán qua provider + ngoại lệ đối soát.
+    PaymentIntentsModule,
   ],
   controllers: [AppController],
   providers: [

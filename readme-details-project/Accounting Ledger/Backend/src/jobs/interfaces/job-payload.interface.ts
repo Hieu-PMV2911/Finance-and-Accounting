@@ -68,6 +68,12 @@ export interface OverdueInvoiceSweepPayload extends JobPayloadBase {
   asOfDate?: string;
 }
 
+/** `payments` · `payment-status-poll` (mục 10.B) */
+export interface PaymentStatusPollPayload extends JobPayloadBase {
+  /** Số intent tra cứu trong một lượt (mặc định 50). */
+  limit?: number;
+}
+
 /** `webhooks` · `deliver-webhook` */
 export interface DeliverWebhookPayload extends JobPayloadBase {
   deliveryId: string;

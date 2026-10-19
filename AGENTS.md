@@ -511,7 +511,31 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 > Vòng đời chứng từ 10.A y như bút toán: `draft → approved → posted → voided`, chỉ từ `approved`
 mới ghi sổ được. Phân bổ chỉ dùng cho phiếu **đã ghi sổ** (còn `draft` ⇒ **400**) và là lớp
 phân tích công nợ — **không** sinh bút toán mới.
-> ⚠️ **Chưa có API**: sao kê & đối soát (`payment_intents`, `bank_statements`) — thuộc **10.B**.
+**Payment intents** (`/api/payment-intents`, mục 10.B — P2.1): giao dịch do **provider** thu, khác phiếu
+thu/chi (ta tự lập). Trạng thái: `initiated → authorized → captured → settled`, nhánh
+`failed`/`refunded`/`expired`, và `unknown` — **timeout không đồng nghĩa thất bại**.
+
+| Method | Route                              | Quyền              | Ghi chú                                                                                     |
+| ------ | ---------------------------------- | ------------------ | ------------------------------------------------------------------------------------------- |
+| GET    | `/api/payment-intents`             | đã đăng nhập       | lọc `status`/`direction`/`partyId`/`fromDate`/`toDate`/`search`                              |
+| GET    | `/api/payment-intents/:id`         | đã đăng nhập       | kèm đối tượng                                                                               |
+| POST   | `/api/payment-intents`             | **admin, maker**   | idempotent theo `idempotencyKey`; preflight kỳ + tài khoản **trước** khi gọi provider (**201**) |
+| POST   | `/api/payment-intents/:id/poll`    | **admin, poster**  | tra cứu lại theo `idempotencyKey`; captured ⇒ ghi sổ **một lần** (**200**)                    |
+| POST   | `/api/payment-intents/:id/settle`  | **admin, poster**  | chỉ `captured → settled`; bút toán đã có từ bước captured (**200**)                          |
+
+**Reconciliation exceptions** (`/api/reconciliation-exceptions`, mục 10.B) — **admin, poster**:
+`GET /` (lọc `type`/`status`/`paymentIntentId`), `GET /:id`, `POST /:id/resolve`, `POST /:id/ignore`.
+Ngoại lệ là **hàng đợi việc cho con người**: `late_event_conflict` (kết quả đến trễ mâu thuẫn —
+**không ghi đè** trạng thái cuối), `unresolved_provider_status` (quá ngưỡng tra cứu), `amount_mismatch`
+(webhook lệch tiền ⇒ **không ghi sổ**), cùng các loại dành cho sao kê P2.2/P2.3.
+
+> Ghi sổ khi captured: `source_type = provider_event`, **`source_id = intent.id`** (không phải event id)
+> để `UNIQUE(source_type, source_id)` bảo đảm một bút toán cho một intent. Bút toán do webhook/cron tạo
+> mang `SYSTEM_ACTOR_ID` (UUID rỗng), không mượn danh người lập. Cron `payment-status-poll` (2 phút,
+> hàng đợi `payments`) tra cứu tới ngưỡng `PAYMENT_INTENT_MAX_POLLS` (mặc định 5) rồi leo thang và dừng.
+
+> ⚠️ **Chưa có API**: sao kê & khớp (`bank_statements`, `bank_transactions`, `reconciliation_matches`) —
+> thuộc **10.B P2.2/P2.3**.
 
 > **Webhook event** của 10.A: `sales_invoice.posted`, `vendor_bill.posted`, `payment.posted`,
 > `invoice.overdue` (cùng các event cũ `journal.posted`, `journal.reversed`, `period.closed`,
@@ -540,9 +564,10 @@ phân tích công nợ — **không** sinh bút toán mới.
   **kỳ kế toán** (danh sách + số dư kỳ).  
   ✅ đã gắn UI cho API mục 6 & 7 — **sổ cái** (trial balance, sổ cái, đối chiếu, sổ cái phụ) và
   **báo cáo tài chính** (P&L, balance sheet, cash flow + xuất Excel/PDF).
-- **Giai đoạn 5**: ✅ **Queue + Schedule (mục 9)** — 4 hàng đợi BullMQ (reports/maintenance/
-  notifications/webhooks) + 5 lịch cron (chốt số dư, kiểm tra bất biến, nhắc công nợ — giờ có
-  phân tích theo đối tượng + tuổi nợ —, quét hóa đơn quá hạn, quét webhook treo), lịch sử
+- **Giai đoạn 5**: ✅ **Queue + Schedule (mục 9)** — 5 hàng đợi BullMQ (reports/maintenance/
+  notifications/webhooks + `payments` cho mục 10.B) + 6 lịch cron (chốt số dư, kiểm tra bất biến, nhắc
+  công nợ — giờ có phân tích theo đối tượng + tuổi nợ —, quét hóa đơn quá hạn, quét webhook treo,
+  tra cứu trạng thái thanh toán), lịch sử
   `job_runs` có thử lại, thông báo trong hệ thống, webhook có retry +
   xử lý kết quả đến trễ; ✅ audit log (mục 8). ⏳ dead-letter queue, gửi email/SMS.
 - **Giai đoạn 6 (mục 10)**: Mở rộng — **kế hoạch chi tiết ở `EXTENSION_PLAN.md`**.
@@ -557,8 +582,10 @@ phân tích công nợ — **không** sinh bút toán mới.
   (tuổi nợ phải thu/phải trả) + `features/documents/` dùng chung cho chứng từ.
   Bốn trang đã được bấm qua trên trình duyệt với API giả lập (ảnh ở
   `Accounting Ledger/verification/`), nhưng **chưa chạy với backend thật** — máy dev chưa có PostgreSQL.
-  ⏳ **10.B** Payment & Reconciliation (vòng đời thanh toán + timeout ≠ thất bại, sao kê, danh sách lệch) →
-  **10.C** đa tiền tệ, thuế, đa công ty. Mọi chứng từ mục 10 ghi sổ **qua `JournalsService`**
+  ✅ **10.B P2.1** vòng đời thanh toán qua provider (`payment_intents`) + `reconciliation_exceptions` +
+  cron `payment-status-poll`: timeout ⇒ `unknown` (không phải thất bại), captured ⇒ ghi sổ đúng một lần,
+  kết quả đến trễ ⇒ **không ghi đè** + ngoại lệ, quá ngưỡng ⇒ leo thang. Chi tiết: `MUC-10-TIEP-THEO.md`.
+  ⏳ **10.B P2.2/P2.3** sao kê ngân hàng + khớp 3 tầng + dead-letter → **10.C** đa tiền tệ, thuế, đa công ty. Mọi chứng từ mục 10 ghi sổ **qua `JournalsService`**
   (không có bộ máy ghi sổ thứ hai) và **một chứng từ nguồn chỉ sinh một bút toán gốc**.
 
 ---

@@ -91,10 +91,13 @@
     hạn** theo `dueDate` và số còn lại sau phân bổ ⇒ thông báo cho `poster`/`admin`
     + webhook `invoice.overdue`; không có gì quá hạn thì không gửi gì.
   - `webhook-retry-sweep` — mỗi 5 phút: đẩy lại webhook `pending` bị mất job.
-- ✅ **Job nền (BullMQ)** — 4 hàng đợi, mỗi hàng một processor:
+  - `payment-status-poll` — mỗi 2 phút (mục 10.B): tra cứu lại provider cho giao dịch chưa có kết luận;
+    captured ⇒ ghi sổ đúng một lần; quá ngưỡng `PAYMENT_INTENT_MAX_POLLS` ⇒ ngoại lệ + thông báo rồi dừng.
+- ✅ **Job nền (BullMQ)** — 5 hàng đợi, mỗi hàng một processor:
   `reports` (sinh báo cáo nặng / xuất Excel-PDF), `maintenance` (chốt số dư,
   kiểm tra bất biến, quét webhook), `notifications` (ghi thông báo, nhắc công
-  nợ), `webhooks` (giao webhook). Retry theo backoff cấu hình riêng từng hàng.
+  nợ), `webhooks` (giao webhook), `payments` (tra cứu trạng thái giao dịch — mục 10.B).
+  Retry theo backoff cấu hình riêng từng hàng.
 - ✅ **Lịch sử & thử lại**: mọi lượt chạy ghi vào `job_runs` (trạng thái, số lần
   thử, payload, kết quả, lỗi, thời lượng) — `jobId` của BullMQ chính là id dòng
   này, nên trạng thái **bền qua restart** và API `POST /jobs/runs/:id/retry`
@@ -120,7 +123,7 @@
 - ⏳ Còn lại: dead-letter queue riêng cho job thất bại vĩnh viễn, gửi email/SMS,
   Bull Board/UI giám sát chuyên sâu, và định kỳ dọn file báo cáo cũ.
 
-## 10. Mở rộng (dài hạn) — ✅ 10.0 & 10.A đã xong · ⏳ 10.B & 10.C (kế hoạch ở `../EXTENSION_PLAN.md`)
+## 10. Mở rộng (dài hạn) — ✅ 10.0, 10.A & 10.B P2.1 đã xong · ⏳ 10.B P2.2/P2.3 & 10.C (kế hoạch ở `../EXTENSION_PLAN.md`)
 
 Biến lõi sổ cái (mục 1–9) thành quy trình chứng từ: **Mini ERP** + **Payment & Reconciliation**,
 rồi lên **đa tiền tệ · đa công ty · thuế**. Bốn chiều thông tin còn thiếu phải bổ sung **trước**
@@ -131,7 +134,7 @@ trúc (source_type/source_id)**, **phân bổ thanh toán (allocations)**, **ti�
 |---|---|---|
 | **10.0 — Nền chung** | `parties` (+ `summary`/`usage`) · `journal_lines.party_id` (sổ cái phụ `GET /ledger/sub-ledger`) · `journal_entries.source_type/source_id` + `UNIQUE(source_type, source_id)` · `allocations` · truy vết trả `source {type, id, code}` | ✅ xong |
 | **10.A — Mini ERP** | Customer/Vendor, Sales Invoice, Vendor Bill, Phiếu thu/chi + phân bổ, **công nợ + tuổi nợ** (`receivables-aging`/`payables-aging`/`revenue-by-party`), luật mặc định tài khoản, `approve/post/void` + bút toán đảo, webhook `*.posted` + `invoice.overdue`; **FE** `/invoices`, `/bills`, `/payments` (phân bổ), `/receivables` | ✅ xong (xem `../MUC-10-TIEP-THEO.md`. FE đã bấm qua trên trình duyệt với API giả lập — `../verification/`; nghiệm thu với **backend thật** còn ⛔ vì chưa có PostgreSQL) |
-| **10.B — Payment & Reconciliation** | Vòng đời thanh toán (`initiated → authorized → captured → settled`, nhánh `unknown` cho timeout), idempotency, webhook + kết quả đến trễ, sao kê ngân hàng, khớp 3 tầng, **danh sách giao dịch lệch**, dead-letter queue | ⏳ kế hoạch |
+| **10.B — Payment & Reconciliation** | **P2.1 ✅** vòng đời thanh toán (`initiated → authorized → captured → settled`, nhánh `unknown` cho timeout), idempotency, webhook `payment.*` + kết quả đến trễ (không ghi đè), `reconciliation_exceptions`, cron `payment-status-poll` + leo thang, provider simulator (chỉ dev). **P2.2/P2.3 ⏳** sao kê ngân hàng, khớp 3 tầng, dead-letter queue, FE | P2.1 ✅ · P2.2/P2.3 ⏳ |
 | **10.C — Nâng cao** | Đa tiền tệ (bảng `exchange_rates` nhập tay + chênh lệch tỷ giá) → thuế GTGT (`tax_codes`) → **đa công ty** (migration riêng) | ⏳ kế hoạch |
 
 **Nguyên tắc bất di bất dịch:** mọi chứng từ của mục 10 ghi sổ **qua `JournalsService`** trong cùng
