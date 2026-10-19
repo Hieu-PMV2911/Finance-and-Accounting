@@ -9,13 +9,17 @@ import {
   ChevronRight,
   ChevronsUpDown,
   FileBarChart,
+  FileText,
+  HandCoins,
   Landmark,
   LayoutDashboard,
   LogOut,
+  Receipt,
   ScrollText,
   ShieldCheck,
   UserCog,
   Users,
+  Wallet,
   Webhook,
   Building2,
 } from 'lucide-react'
@@ -74,6 +78,16 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/periods', label: 'Kỳ kế toán', icon: CalendarRange },
       { to: '/ledger', label: 'Sổ cái', icon: BookMarked },
       { to: '/reports', label: 'Báo cáo tài chính', icon: FileBarChart },
+    ],
+  },
+  {
+    // Mục 10.A — chứng từ bán/mua, thanh toán và tuổi nợ.
+    label: 'Chứng từ',
+    items: [
+      { to: '/invoices', label: 'Hóa đơn bán', icon: Receipt },
+      { to: '/bills', label: 'Hóa đơn mua', icon: FileText },
+      { to: '/payments', label: 'Phiếu thu / chi', icon: Wallet },
+      { to: '/receivables', label: 'Công nợ', icon: HandCoins },
     ],
   },
   {

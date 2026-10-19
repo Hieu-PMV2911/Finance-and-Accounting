@@ -77,6 +77,8 @@ không được mount ⇒ `/api/parties*` **không tồn tại** dù code có. `
 - Toàn bộ 10.B (payment intent, provider mô phỏng, sao kê, đối soát).
 - FE: chưa có `features/invoices`, `features/bills`, `features/payments`, `features/reconciliation`.
   Hiện có: `accounts, audit, auth, dashboard, jobs, journals, ledger, notifications, parties, periods, profile, reports, users, webhooks`.
+  → **Đã xử lý ở P1.6**: `invoices`, `bills`, `payments`, `receivables` + `documents` (component dùng chung).
+  Còn thiếu: `reconciliation` và `payment-intents` (đều thuộc P2).
 - Test: chưa có spec cho `invoices`, `bills`, `parties`, `allocations`.
 
 ---
@@ -204,12 +206,59 @@ bảng danh mục hàng hóa) — chỉ làm khi thật sự cần, vì quyết 
       đọc từ chính bảng nghiệp vụ (`invoice_no`/`bill_no`/`payment.code`); FE hiển thị số thật này
       và giữ `reference` làm "tham chiếu trên bút toán".
 
+### P1.6 Giao diện 10.A ✅ HOÀN THÀNH
+
+Bốn trang FE cho những API đã có ở P1.1–P1.5 — **không** thêm API mới, chỉ nối UI:
+
+| Trang | Route | Nội dung |
+| ----- | ----- | -------- |
+| Hóa đơn bán | `/invoices` | danh sách + lọc (trạng thái/khách/số hóa đơn), form dòng, chi tiết, `approve`/`post`/`void` |
+| Hóa đơn mua | `/bills` | đối xứng hoàn toàn với hóa đơn bán |
+| Phiếu thu / chi | `/payments` | danh sách + lọc, form một cửa cho hai chiều, **hộp thoại phân bổ** vào hóa đơn |
+| Công nợ | `/receivables` | tab phải thu/phải trả, tổng + 6 nhóm tuổi (chưa đến hạn · 1–30 · 31–60 · 61–90 · >90 · không có hạn), bảng theo đối tượng và theo chứng từ |
+
+Quyết định kỹ thuật đáng nhớ:
+
+- **`DocumentStatus` dùng chung** cho cả ba loại chứng từ (`draft → approved → posted → voided`)
+  — một bảng nhãn, một badge, không có ba bản sao lệch nhau.
+- **Thành tiền là giá trị dẫn xuất** (`số lượng × đơn giá`); form gửi `subtotal`/`taxAmount`/`total`
+  dạng **chuỗi** 4 chữ số thập phân, backend vẫn kiểm lại `Σ dòng = subtotal` và
+  `subtotal + thuế = total` nên UI không thể đẩy số lệch vào sổ.
+- **Phân bổ đọc công nợ từ chính báo cáo aging** (`GET /reports/*-aging?partyId=…&includeSettled=true`)
+  thay vì tự cộng `total − allocations` ở client — hai màn hình không thể lệch nhau. Bao gồm cả
+  chứng từ đã tất toán để dòng đã trả đủ vẫn hiện và **gỡ được** phân bổ.
+- **Trần hai bên được kiểm ở client cho phản hồi nhanh, nhưng backend vẫn là nơi quyết định**:
+  client cộng lại phần phiếu này đang giữ (`outstanding + đang phân bổ`) để "đặt lại" không bị
+  tính hai lần.
+- **`idempotencyKey` sinh một lần lúc mở form** → bấm Lưu hai lần do timeout không tạo hai phiếu.
+- Form modal **render có điều kiện** (không dùng `setState` trong `useEffect`), đúng rule lint của repo.
+
+**Kiểm chứng giao diện — đã bấm thật trên trình duyệt, không chỉ đọc code:**
+
+Máy vẫn không có PostgreSQL nên dựng **API giả lập** ngoài repo (đúng hình dạng response của backend),
+chạy `vite` thật và thao tác qua các luồng:
+
+| Luồng | Kết quả đo được |
+| ----- | --------------- |
+| Menu dòng hóa đơn `draft` (admin) | có Xem chi tiết / Sửa / Xác nhận / Hủy — **không** có Ghi sổ |
+| Bấm Xác nhận → mở lại menu | trạng thái `Đã xác nhận`; menu còn Xem chi tiết / Ghi sổ / Hủy |
+| Bấm Ghi sổ | trạng thái `Đã ghi sổ`; hóa đơn xuất hiện trong công nợ |
+| Chi tiết hóa đơn | dòng hàng hiển thị `SL × đơn giá`, tạm tính/thuế/tổng khớp |
+| Tạo hóa đơn 1 × 750.000 | payload gửi đi `subtotal=750000.0000`, `taxAmount=0.0000`, `total=750000.0000`; dòng `quantity="1.0000"`, `unitPrice="750000.0000"`; **không** gửi `accountId` (để luật mặc định quyết định) |
+| Tạo phiếu thu 500.000 | `amount="500000.0000"`, `currency="VND"`, có `idempotencyKey` UUID |
+| Phân bổ 1.000.000 vào hóa đơn 1.500.000 của phiếu 2.500.000 | “Đã phân bổ 1.000.000 / còn 1.500.000”; còn nợ hóa đơn 1.500.000 → 500.000; xuất hiện nút Gỡ |
+| Nhập vượt trần (1.600.000 khi tối đa 1.500.000) | bị chặn, số đã lưu **không** đổi |
+| Công nợ | Σ 6 nhóm = 5.500.000 = tổng còn lại = dòng theo đối tượng (khớp bất biến #1) |
+
+Ảnh chụp: `verification/fe-10a-*.png`. **Giới hạn:** API giả lập chỉ chứng minh UI + hình dạng payload;
+**không** chứng minh SQL, khóa `FOR UPDATE`, hay ràng buộc DB — phải chạy lại với backend thật khi có DB.
+
 **Nghiệm thu P1 — trạng thái thật:**
 
 | Tiêu chí | Kết quả |
 | -------- | ------- |
 | `tsc --noEmit` · `oxlint` · `vitest` · `nest build` (Backend) | ✅ exit 0 · 0 warning/0 error · **194/194** (trước đây 162) · exit 0 |
-| `tsc -b` · `oxlint` · `vite build` (Frontend) | ✅ exit 0 · 0 warning/0 error · exit 0 |
+| `tsc -b` · `oxlint` · `vite build` (Frontend) | ✅ exit 0 · **0 warning/0 error** (110 file) · exit 0 — sau khi thêm 4 trang 10.A |
 | Σ nhóm tuổi = Σ `outstanding` = Σ theo đối tượng | ✅ `aging-report.service.spec.ts` (6 test, gồm biên 30/31, 60/61, 90/91 ngày) |
 | Vòng đời `draft→approved→posted→voided` + bút toán đảo + webhook `*.posted` | ✅ `sales-invoices.service.spec.ts` (7) + `payments.service.spec.ts` (5) |
 | Trần phân bổ theo nguồn/dịch + idempotent theo cặp + chặn phân bổ khi chưa ghi sổ | ✅ `payment-allocations.service.spec.ts` (7); phần khóa `FOR UPDATE` thật chỉ chạy được trên PostgreSQL (test #3 của `EXTENSION_PLAN.md` mục 7) |
@@ -313,15 +362,19 @@ Làm **theo thứ tự này**, mỗi phần một migration riêng.
 
 ## 7. Frontend còn thiếu
 
-| Trang | Nội dung | Ghi chú |
-| ----- | -------- | ------- |
-| Đối tượng | CRUD khách/nhà cung cấp + xem số dư | `features/parties` **đã có** — chỉ cần bổ sung summary |
-| Hóa đơn bán | danh sách + form dòng + approve/post/void | `features/invoices` (mới) |
-| Hóa đơn mua | đối xứng | `features/bills` (mới) |
-| Phiếu thu/chi | danh sách + form + **UI phân bổ** vào hóa đơn | `features/payments` (mới) |
-| Công nợ | công nợ hiện tại + aging theo đối tượng | `features/receivables` (mới) |
-| Thanh toán | intent + trạng thái + nút tra cứu lại | `features/payment-intents` (mới) |
-| Đối soát | nhập sao kê, bảng khớp, danh sách lệch + xử lý | `features/reconciliation` (mới) |
+| Trang | Nội dung | Trạng thái |
+| ----- | -------- | ---------- |
+| Đối tượng | CRUD khách/nhà cung cấp + xem số dư | ✅ `features/parties` (số dư đọc từ `/parties/:id/summary`) |
+| Hóa đơn bán | danh sách + form dòng + approve/post/void | ✅ `features/invoices` (P1.6) |
+| Hóa đơn mua | đối xứng | ✅ `features/bills` (P1.6) |
+| Phiếu thu/chi | danh sách + form + **UI phân bổ** vào hóa đơn | ✅ `features/payments` (P1.6) |
+| Công nợ | công nợ hiện tại + aging theo đối tượng | ✅ `features/receivables` (P1.6) |
+| Thanh toán | intent + trạng thái + nút tra cứu lại | ⏳ `features/payment-intents` — chờ P2.1 |
+| Đối soát | nhập sao kê, bảng khớp, danh sách lệch + xử lý | ⏳ `features/reconciliation` — chờ P2.2/P2.3 |
+
+Component dùng chung cho chứng từ: `features/documents/` — `LineItemsEditor` (dòng hàng, thành tiền dẫn xuất),
+`DocumentDetailDialog`, `VoidDocumentDialog` (lý do bắt buộc), `DocumentStatusBadge`, `money.ts`
+(`lineAmount`/`sumAmounts`/`subtractAmounts`/`toMoneyString`).
 
 Dùng lại `DataTable`, `DatePicker`, `ScopePicker`, `PageHeader`, `DataStates`, `lib/format`. Không tạo
 bộ component mới nếu bộ hiện có đủ dùng. Cập nhật `types/api.ts` + `lib/api.ts` theo quy ước hiện có.
@@ -352,7 +405,7 @@ bộ component mới nếu bộ hiện có đủ dùng. Cập nhật `types/api.
 | P1.3 | `payments` + API phân bổ | 4–5 ngày | P1.2 |
 | P1.4 | Aging + revenue-by-party + nâng cấp nhắc nợ + webhook event | 3–4 ngày | P1.3 |
 | P1.5 | party summary + sub-ledger + mở rộng traceability | 2 ngày | P0 |
-| FE-10.A | 5 trang FE của 10.A | 5–7 ngày | P1 |
+| P1.6 | ✅ 4 trang FE của 10.A (hóa đơn bán/mua, phiếu, công nợ) | 5–7 ngày | P1 |
 | P2 | Payment & Reconciliation (intent, provider sim, sao kê, khớp, lệch) | 4–6 tuần | P1 |
 | P3 | Đa tiền tệ → thuế → đa công ty | 4–6 tuần | P1 + P2 |
 
@@ -366,8 +419,13 @@ bộ component mới nếu bộ hiện có đủ dùng. Cập nhật `types/api.
 - [ ] Phân bổ thanh toán một phần chạy đúng, `outstanding` khớp tổng `allocations`.
 - [ ] Con số trên báo cáo aging đi ngược được tới chứng từ nguồn và vết kiểm toán qua API.
 - [ ] CSV và adapter API cùng đi vào một `bank_transactions`, một bảng khớp (không nhánh code riêng).
-- [ ] `FUTURE_FEATURES.md` mục 10, `DEVELOPMENT_PLAN.md` mục 12, `AGENTS.md` (bảng API + giai đoạn) và
-      `EXTENSION_PLAN.md` được cập nhật khớp thực tế (quy tắc làm việc #3).
+- [x] `FUTURE_FEATURES.md` mục 10, `AGENTS.md` (bảng API + giai đoạn) được cập nhật khớp thực tế
+      (quy tắc làm việc #3). `DEVELOPMENT_PLAN.md` mục 12 và `EXTENSION_PLAN.md` vẫn đang mô tả
+      kế hoạch gốc — chúng chỉ nên sửa khi P2/P3 chốt lại phạm vi.
+- [x] FE 10.A chạy thật trên trình duyệt (danh sách → tạo → duyệt → ghi sổ → phân bổ → công nợ) —
+      đã bấm qua toàn bộ luồng ở P1.6 với API giả lập; ảnh ở `verification/`.
+- [ ] Chạy lại cùng luồng đó với **backend thật + PostgreSQL** — chưa làm được (`5432` không mở, không Docker).
+      Gom chung lần chạy với nghiệm thu HTTP của P0/P1.
 - [ ] Ghi rõ **ngoài phạm vi**: quản lý tồn kho/giá vốn theo lô (quyết định #2).
 
 ---

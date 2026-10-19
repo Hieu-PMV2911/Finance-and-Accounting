@@ -130,7 +130,7 @@ trúc (source_type/source_id)**, **phân bổ thanh toán (allocations)**, **ti�
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
 | **10.0 — Nền chung** | `parties` (+ `summary`/`usage`) · `journal_lines.party_id` (sổ cái phụ `GET /ledger/sub-ledger`) · `journal_entries.source_type/source_id` + `UNIQUE(source_type, source_id)` · `allocations` · truy vết trả `source {type, id, code}` | ✅ xong |
-| **10.A — Mini ERP** | Customer/Vendor, Sales Invoice, Vendor Bill, Phiếu thu/chi + phân bổ, **công nợ + tuổi nợ** (`receivables-aging`/`payables-aging`/`revenue-by-party`), luật mặc định tài khoản, `approve/post/void` + bút toán đảo, webhook `*.posted` + `invoice.overdue` | ✅ xong (xem `../MUC-10-TIEP-THEO.md` — nghiệm thu qua HTTP còn ⛔ khi chưa có Postgres) |
+| **10.A — Mini ERP** | Customer/Vendor, Sales Invoice, Vendor Bill, Phiếu thu/chi + phân bổ, **công nợ + tuổi nợ** (`receivables-aging`/`payables-aging`/`revenue-by-party`), luật mặc định tài khoản, `approve/post/void` + bút toán đảo, webhook `*.posted` + `invoice.overdue`; **FE** `/invoices`, `/bills`, `/payments` (phân bổ), `/receivables` | ✅ xong (xem `../MUC-10-TIEP-THEO.md`. FE đã bấm qua trên trình duyệt với API giả lập — `../verification/`; nghiệm thu với **backend thật** còn ⛔ vì chưa có PostgreSQL) |
 | **10.B — Payment & Reconciliation** | Vòng đời thanh toán (`initiated → authorized → captured → settled`, nhánh `unknown` cho timeout), idempotency, webhook + kết quả đến trễ, sao kê ngân hàng, khớp 3 tầng, **danh sách giao dịch lệch**, dead-letter queue | ⏳ kế hoạch |
 | **10.C — Nâng cao** | Đa tiền tệ (bảng `exchange_rates` nhập tay + chênh lệch tỷ giá) → thuế GTGT (`tax_codes`) → **đa công ty** (migration riêng) | ⏳ kế hoạch |
 

@@ -39,6 +39,26 @@ const FiscalPeriodsPage = lazy(() =>
     default: module.FiscalPeriodsPage,
   })),
 )
+const InvoicesPage = lazy(() =>
+  import('@/features/invoices/InvoicesPage').then((module) => ({
+    default: module.InvoicesPage,
+  })),
+)
+const BillsPage = lazy(() =>
+  import('@/features/bills/BillsPage').then((module) => ({
+    default: module.BillsPage,
+  })),
+)
+const PaymentsPage = lazy(() =>
+  import('@/features/payments/PaymentsPage').then((module) => ({
+    default: module.PaymentsPage,
+  })),
+)
+const AgingPage = lazy(() =>
+  import('@/features/receivables/AgingPage').then((module) => ({
+    default: module.AgingPage,
+  })),
+)
 const LedgerPage = lazy(() =>
   import('@/features/ledger/LedgerPage').then((module) => ({
     default: module.LedgerPage,
@@ -92,6 +112,10 @@ function App() {
               <Route element={<Layout />}>
                 <Route index element={<DashboardPage />} />
                 <Route path="journals" element={<JournalsPage />} />
+                <Route path="invoices" element={<InvoicesPage />} />
+                <Route path="bills" element={<BillsPage />} />
+                <Route path="payments" element={<PaymentsPage />} />
+                <Route path="receivables" element={<AgingPage />} />
                 <Route path="periods" element={<FiscalPeriodsPage />} />
                 <Route path="ledger" element={<LedgerPage />} />
                 <Route path="reports" element={<ReportsPage />} />

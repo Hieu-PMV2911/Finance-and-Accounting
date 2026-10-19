@@ -1106,3 +1106,313 @@ export const WEBHOOK_EVENT_STATUS_LABELS: Record<WebhookEventStatus, string> = {
   late: 'Đến trễ',
   rejected: 'Bị từ chối',
 }
+
+// -------------------------------------------------------------
+// Mục 10.A — Hóa đơn bán/mua, phiếu thu-chi, phân bổ, tuổi nợ
+// -------------------------------------------------------------
+
+/**
+ * Vòng đời chứng từ nghiệp vụ: `draft → approved → posted → voided`.
+ *
+ * Hóa đơn bán, hóa đơn mua và phiếu thu/chi dùng **chung** vòng đời này — nên
+ * dùng chung kiểu và nhãn, tránh ba bảng nhãn lệch nhau khi backend đổi.
+ */
+export type DocumentStatus = 'draft' | 'approved' | 'posted' | 'voided'
+
+export const DOCUMENT_STATUSES: DocumentStatus[] = [
+  'draft',
+  'approved',
+  'posted',
+  'voided',
+]
+
+export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
+  draft: 'Nháp',
+  approved: 'Đã xác nhận',
+  posted: 'Đã ghi sổ',
+  voided: 'Đã hủy',
+}
+
+/** Một dòng chứng từ (hàng hóa/dịch vụ) — tiền luôn là chuỗi `NUMERIC(19,4)`. */
+export interface DocumentLine {
+  id: string
+  lineNo: number
+  accountId: string
+  description: string | null
+  quantity: string
+  unitPrice: string
+  amount: string
+}
+
+/**
+ * Dòng chứng từ khi gửi lên server.
+ *
+ * `accountId` bỏ trống ⇒ backend giải theo **luật mặc định tài khoản** (mục 10.A);
+ * chỉ gửi khi có quyền `admin`/`poster` và thật sự muốn ghi đè.
+ */
+export interface DocumentLinePayload {
+  accountId?: string
+  category?: string
+  description?: string
+  quantity?: string
+  unitPrice?: string
+  amount: string
+}
+
+export interface SalesInvoice {
+  id: string
+  invoiceNo: string
+  partyId: string
+  party?: Party
+  date: string
+  dueDate: string | null
+  description: string | null
+  currency: string | null
+  status: DocumentStatus
+  subtotal: string
+  taxAmount: string
+  total: string
+  receivableAccountId: string | null
+  journalEntryId: string | null
+  reversalJournalEntryId: string | null
+  voidReason: string | null
+  createdAt: string
+  updatedAt: string
+  /** Chỉ có ở endpoint chi tiết (`GET /sales-invoices/:id`). */
+  lines?: DocumentLine[]
+}
+
+export interface SalesInvoiceFilters {
+  partyId?: string
+  status?: DocumentStatus
+  invoiceNo?: string
+  fromDate?: string
+  toDate?: string
+}
+
+export interface CreateSalesInvoicePayload {
+  invoiceNo: string
+  partyId: string
+  date: string
+  dueDate?: string
+  description?: string
+  currency?: string
+  subtotal: string
+  taxAmount?: string
+  total: string
+  receivableAccountId?: string
+  lines: DocumentLinePayload[]
+}
+
+export type UpdateSalesInvoicePayload = Partial<CreateSalesInvoicePayload>
+
+export interface VendorBill {
+  id: string
+  billNo: string
+  partyId: string
+  party?: Party
+  date: string
+  dueDate: string | null
+  description: string | null
+  currency: string | null
+  status: DocumentStatus
+  subtotal: string
+  taxAmount: string
+  total: string
+  payableAccountId: string | null
+  journalEntryId: string | null
+  reversalJournalEntryId: string | null
+  voidReason: string | null
+  createdAt: string
+  updatedAt: string
+  /** Chỉ có ở endpoint chi tiết (`GET /vendor-bills/:id`). */
+  lines?: DocumentLine[]
+}
+
+export interface VendorBillFilters {
+  partyId?: string
+  status?: DocumentStatus
+  billNo?: string
+  fromDate?: string
+  toDate?: string
+}
+
+export interface CreateVendorBillPayload {
+  billNo: string
+  partyId: string
+  date: string
+  dueDate?: string
+  description?: string
+  currency?: string
+  subtotal: string
+  taxAmount?: string
+  total: string
+  payableAccountId?: string
+  lines: DocumentLinePayload[]
+}
+
+export type UpdateVendorBillPayload = Partial<CreateVendorBillPayload>
+
+/** Hủy chứng từ — lý do **bắt buộc** để vết kiểm toán giải thích được. */
+export interface VoidDocumentPayload {
+  reason: string
+  /** Ngày hạch toán của bút toán đảo; bỏ trống ⇒ ngày chứng từ. */
+  date?: string
+}
+
+// ----- Phiếu thu / phiếu chi -----
+
+export type PaymentDirection = 'receipt' | 'payment'
+export type PaymentMethod = 'cash' | 'bank_transfer' | 'other'
+export type PaymentStatus = DocumentStatus
+
+export const PAYMENT_DIRECTIONS: PaymentDirection[] = ['receipt', 'payment']
+
+export const PAYMENT_DIRECTION_LABELS: Record<PaymentDirection, string> = {
+  receipt: 'Phiếu thu',
+  payment: 'Phiếu chi',
+}
+
+export const PAYMENT_METHODS: PaymentMethod[] = [
+  'cash',
+  'bank_transfer',
+  'other',
+]
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash: 'Tiền mặt',
+  bank_transfer: 'Chuyển khoản',
+  other: 'Khác',
+}
+
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> =
+  DOCUMENT_STATUS_LABELS
+
+export interface Payment {
+  id: string
+  code: string
+  direction: PaymentDirection
+  partyId: string
+  party?: Party
+  date: string
+  amount: string
+  currency: string | null
+  method: PaymentMethod
+  reference: string | null
+  description: string | null
+  cashAccountId: string | null
+  idempotencyKey: string | null
+  status: PaymentStatus
+  journalEntryId: string | null
+  reversalJournalEntryId: string | null
+  voidReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PaymentFilters {
+  direction?: PaymentDirection
+  status?: PaymentStatus
+  method?: PaymentMethod
+  partyId?: string
+  fromDate?: string
+  toDate?: string
+  search?: string
+}
+
+export interface CreatePaymentPayload {
+  code: string
+  direction: PaymentDirection
+  partyId: string
+  date: string
+  amount: string
+  currency?: string
+  method: PaymentMethod
+  reference?: string
+  description?: string
+  cashAccountId?: string
+  idempotencyKey?: string
+}
+
+export type UpdatePaymentPayload = Partial<CreatePaymentPayload>
+
+/** Loại chứng từ đích mà phiếu thu/chi có thể phân bổ vào. */
+export type AllocationTargetType = 'sales_invoice' | 'vendor_bill'
+
+export const ALLOCATION_TARGET_LABELS: Record<AllocationTargetType, string> = {
+  sales_invoice: 'Hóa đơn bán',
+  vendor_bill: 'Hóa đơn mua',
+}
+
+export interface PaymentAllocation {
+  id: string
+  targetType: AllocationTargetType
+  targetId: string
+  /** Số chứng từ đích (đọc được, không phải id). */
+  targetCode: string | null
+  amount: string
+  createdAt: string
+}
+
+export interface CreateAllocationPayload {
+  targetType: AllocationTargetType
+  targetId: string
+  amount: string
+}
+
+// ----- Tuổi nợ (aging) -----
+
+export type AgingBucketKey =
+  | 'not_due'
+  | 'overdue_1_30'
+  | 'overdue_31_60'
+  | 'overdue_61_90'
+  | 'overdue_over_90'
+  | 'no_due_date'
+
+export interface AgingBucket {
+  key: AgingBucketKey
+  label: string
+  amount: string
+}
+
+export interface AgingLine {
+  targetType: AllocationTargetType
+  targetId: string
+  code: string
+  partyId: string
+  partyCode: string
+  partyName: string
+  date: string
+  dueDate: string | null
+  total: string
+  allocated: string
+  /** `total − allocated` — số còn phải thu/phải trả. */
+  outstanding: string
+  /** Số ngày quá hạn tại `asOfDate`; âm = chưa đến hạn; `null` = không có hạn. */
+  daysOverdue: number | null
+  bucket: AgingBucketKey
+}
+
+export interface AgingPartyRow {
+  partyId: string
+  partyCode: string
+  partyName: string
+  buckets: Record<AgingBucketKey, string>
+  total: string
+}
+
+export interface AgingView {
+  targetType: AllocationTargetType
+  asOfDate: string
+  buckets: AgingBucket[]
+  totalOutstanding: string
+  lines: AgingLine[]
+  parties: AgingPartyRow[]
+}
+
+export interface AgingFilters {
+  asOfDate?: string
+  partyId?: string
+  includeSettled?: boolean
+}

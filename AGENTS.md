@@ -245,6 +245,10 @@ D:\TC_KT\
     `skeleton`, `alert`, `dropdown-menu`, `sonner`, `sidebar`, `sheet`, `tooltip`, `popover`,  
     `calendar`, `date-picker`, `data-table`. Cần thêm → tạo file mới trong thư mục đó  
     theo đúng chuẩn shadcn (giữ nguyên cấu trúc `cva` + `data-slot`).
+  - **Chứng từ 10.A**: dùng chung `DocumentStatus` + `DOCUMENT_STATUS_LABELS` và các component ở
+    `src/features/documents/` (`LineItemsEditor`, `DocumentDetailDialog`, `VoidDocumentDialog`,
+    `DocumentStatusBadge`, `money.ts`). Đừng dựng lại bảng dòng hàng / badge trạng thái riêng cho
+    từng loại chứng từ — ba bản sao sẽ lệch nhau khi backend đổi vòng đời.
   - **Bảng danh sách dùng `DataTable`** (`@/components/ui/data-table`) — TanStack Table v8,  
     `pageSize` mặc định **10**, chân bảng có dãy nút số trang + chọn số dòng/trang. Đừng tự  
     viết lại `<Table>` cho các trang danh sách; bảng báo cáo/trial balance thì vẫn dùng `<Table>`.
@@ -534,7 +538,8 @@ phân tích công nợ — **không** sinh bút toán mới.
   ✅ đã chuẩn hóa toàn bộ UI bằng **Tailwind v4 + shadcn/ui** (xem mục 3 & 6).  
   ✅ đã gắn UI cho API mục 4 & 5 — màn hình **bút toán** (danh sách/chi tiết/đảo) và  
   **kỳ kế toán** (danh sách + số dư kỳ).  
-  ⏳ còn lại: màn hình **sổ cái**, **báo cáo** (Recharts) — API mục 6 & 7 đã sẵn sàng, chưa gắn UI.
+  ✅ đã gắn UI cho API mục 6 & 7 — **sổ cái** (trial balance, sổ cái, đối chiếu, sổ cái phụ) và
+  **báo cáo tài chính** (P&L, balance sheet, cash flow + xuất Excel/PDF).
 - **Giai đoạn 5**: ✅ **Queue + Schedule (mục 9)** — 4 hàng đợi BullMQ (reports/maintenance/
   notifications/webhooks) + 5 lịch cron (chốt số dư, kiểm tra bất biến, nhắc công nợ — giờ có
   phân tích theo đối tượng + tuổi nợ —, quét hóa đơn quá hạn, quét webhook treo), lịch sử
@@ -548,6 +553,10 @@ phân tích công nợ — **không** sinh bút toán mới.
   + phân bổ, `account-defaults`, báo cáo `receivables-aging` / `payables-aging` /
   `revenue-by-party`, job `overdue-invoice-sweep` + 4 webhook event mới, `debt-reminder` nâng cấp
   theo đối tượng. **Trạng thái chi tiết từng hạng mục P0/P1: `MUC-10-TIEP-THEO.md`.**
+  FE (P1.6): `/invoices`, `/bills`, `/payments` (kèm hộp thoại phân bổ), `/receivables`
+  (tuổi nợ phải thu/phải trả) + `features/documents/` dùng chung cho chứng từ.
+  Bốn trang đã được bấm qua trên trình duyệt với API giả lập (ảnh ở
+  `Accounting Ledger/verification/`), nhưng **chưa chạy với backend thật** — máy dev chưa có PostgreSQL.
   ⏳ **10.B** Payment & Reconciliation (vòng đời thanh toán + timeout ≠ thất bại, sao kê, danh sách lệch) →
   **10.C** đa tiền tệ, thuế, đa công ty. Mọi chứng từ mục 10 ghi sổ **qua `JournalsService`**
   (không có bộ máy ghi sổ thứ hai) và **một chứng từ nguồn chỉ sinh một bút toán gốc**.
