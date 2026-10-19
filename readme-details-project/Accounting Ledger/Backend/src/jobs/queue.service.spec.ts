@@ -24,6 +24,7 @@ function build() {
   const notifications = makeQueue();
   const webhooks = makeQueue();
   const payments = makeQueue();
+  const statements = makeQueue();
 
   const service = new QueueService(
     runs as unknown as JobRunsService,
@@ -32,6 +33,7 @@ function build() {
     notifications as unknown as Queue,
     webhooks as unknown as Queue,
     payments as unknown as Queue,
+    statements as unknown as Queue,
   );
 
   return {
@@ -42,6 +44,7 @@ function build() {
     notifications,
     webhooks,
     payments,
+    statements,
   };
 }
 
@@ -133,7 +136,7 @@ describe('QueueService', () => {
 
     const overview = await service.overview();
 
-    expect(overview).toHaveLength(5);
+    expect(overview).toHaveLength(6);
 
     const maintenanceView = overview.find((item) => item.queue === JobQueue.MAINTENANCE);
     expect(maintenanceView?.reachable).toBe(true);

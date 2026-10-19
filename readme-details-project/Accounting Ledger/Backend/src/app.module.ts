@@ -25,6 +25,7 @@ import { LedgerModule } from './ledger/ledger.module.js';
 import { PartiesModule } from './parties/parties.module.js';
 import { PaymentIntentsModule } from './payment-intents/payment-intents.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
+import { ReconciliationModule } from './reconciliation/reconciliation.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -94,6 +95,8 @@ import { UsersModule } from './users/users.module.js';
     JobsModule,
     // Mục 10.B — vòng đời thanh toán qua provider + ngoại lệ đối soát.
     PaymentIntentsModule,
+    // Mục 10.B — sao kê ngân hàng + khớp 3 tầng + danh sách lệch.
+    ReconciliationModule,
   ],
   controllers: [AppController],
   providers: [

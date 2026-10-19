@@ -21,7 +21,9 @@ import { JobsModule } from './jobs.module.js';
 import { JobsScheduler } from './jobs.scheduler.js';
 import { MaintenanceProcessor } from './processors/maintenance.processor.js';
 import { NotificationsProcessor } from './processors/notifications.processor.js';
+import { PaymentsProcessor } from './processors/payments.processor.js';
 import { ReportsProcessor } from './processors/reports.processor.js';
+import { StatementsProcessor } from './processors/statements.processor.js';
 import { WebhooksProcessor } from './processors/webhooks.processor.js';
 import { QueueService } from './queue.service.js';
 
@@ -119,6 +121,8 @@ describe.skipIf(!hasRedis)('JobsModule boot (cần Redis)', () => {
       MaintenanceProcessor,
       NotificationsProcessor,
       WebhooksProcessor,
+      PaymentsProcessor,
+      StatementsProcessor,
     ]) {
       const instance = moduleRef.get(processor) as { worker?: unknown };
       expect(

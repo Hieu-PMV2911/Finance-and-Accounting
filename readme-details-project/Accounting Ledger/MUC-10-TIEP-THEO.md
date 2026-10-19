@@ -359,31 +359,86 @@ và P2.3 khớp 3 tầng + cron `reconciliation-catchup` + dead-letter queue; FE
 `ALTER TYPE reconciliation_exception_status_enum ADD VALUE 'open';` / `'resolved';` / `'ignored';`
 (chỉ các giá trị chưa có — enum mới do TypeORM tạo ở lần `synchronize` đầu).
 
-### P2.2 Mô hình giao dịch ngân hàng thống nhất (quyết định #4)
+### P2.2 Mô hình giao dịch ngân hàng thống nhất (quyết định #4) ✅ HOÀN THÀNH
 
-- [ ] `bank_transactions` — **mô hình chuẩn duy nhất**: `id`, `accountId` (111/112), `transactionDate`,
-      `valueDate`, `description`, `reference`, `bankRef`, `direction` (`in` | `out`), `amount`,
-      `currency`, `source` (`file` | `api`), `sourceRef` (id file / id kết nối), `statementId`, `raw` JSONB,
-      `matchStatus` (`matched` | `suggested` | `unmatched`), `UNIQUE(accountId, bankRef, amount, transactionDate)`.
-- [ ] Interface `StatementSourceAdapter { parse(input): NormalizedBankTransaction[] }` với hai hiện thực:
-      `CsvJsonStatementAdapter` (làm ngay) và `BankApiStatementAdapter` (**khung rỗng**, làm sau — chưa cần
-      dịch vụ ngoài).
-- [ ] **Cùng một pipeline** cho cả hai nguồn: normalize → chống trùng → khớp → đối soát. Parser **không**
+- [x] `bank_transactions` — **mô hình chuẩn duy nhất**: `id`, `accountId` (111/112), `transactionDate`,
+      `valueDate`, `description`, `reference`, `bankRef`, `direction` (`in` | `out`), `amount` (**luôn dương**,
+      chiều nằm ở `direction`), `currency`, `source` (`file` | `api`), `sourceRef`, `statementId` (nullable),
+      `raw` JSONB, `matchStatus` (`matched` | `suggested` | `unmatched`).
+- [x] Interface `StatementSourceAdapter { parse(input): NormalizedBankTransaction[] }` với hai hiện thực:
+      `CsvJsonStatementAdapter` (CSV + JSON, **hoạt động**) và `BankApiStatementAdapter` (**khung rỗng**,
+      `parse` từ chối thẳng thay vì giả vờ — chờ có nhà cung cấp thật).
+- [x] **Cùng một pipeline** cho cả hai nguồn: normalize → chống trùng → khớp → đối soát. Parser **không**
       chứa logic khớp; logic khớp **không** biết dữ liệu đến từ file hay API.
-- [ ] Nạp file chạy trong job `statements` (BullMQ) để không chặn request; trả `202` + job id.
-- [ ] `bank_statements`: `code`, `accountId`, `statementDate`, `openingBalance`, `closingBalance`, `status`;
-      chốt `reconciled` ⇒ **bất biến**.
+- [x] Nạp file chạy trong job `statements` (BullMQ) để không chặn request; trả `202` + job id.
+- [x] `bank_statements`: `code` (unique), `accountId`, `statementDate`, `openingBalance`, `closingBalance`,
+      `status` (`imported → reconciled`); chốt ⇒ **bất biến**.
 
-### P2.3 Khớp & xử lý lệch
+### P2.3 Khớp & xử lý lệch ✅ HOÀN THÀNH
 
-- [ ] Khớp 3 tầng: (1) `bankRef`/`reference` + số tiền; (2) số tiền + ngày ±N; (3) gợi ý mờ theo diễn
-      giải chứa mã chứng từ. Kết quả mỗi dòng: `matched` | `suggested` | `unmatched`.
-- [ ] `reconciliation_matches`: cho phép **n-n**, luôn lưu `amount` từng dòng khớp.
-- [ ] `reconciliation_exceptions`: `missing_internal` | `missing_statement` | `amount_mismatch` |
-      `duplicate_payment` | `late_event_conflict`; trạng thái `open/resolved/ignored` + `resolvedBy/At`.
-- [ ] Quy trình thủ công: tạo bút toán phí/lãi ngân hàng, đánh dấu đã xử lý, hoặc mở điều tra — mọi thao
-      tác tự động vào audit log.
-- [ ] Cron `reconciliation-catchup` (hằng ngày) + **hoàn tất ⏳ mục 9**: hàng đợi `dead-letter`.
+- [x] Khớp 3 tầng: (1) `bankRef`/`reference` + số tiền; (2) số tiền + ngày ±N
+      (`RECONCILIATION_DATE_TOLERANCE_DAYS`, mặc định 3); (3) gợi ý mờ theo diễn giải chứa mã chứng từ.
+      Kết quả mỗi dòng: `matched` | `suggested` (tầng 3, **chờ người xác nhận**) | `unmatched`.
+- [x] `reconciliation_matches`: lưu `amount` từng dòng khớp, `matchedByTier` (`reference`/`amount_date`/
+      `manual`), unique `(transactionId, targetType, targetId)`.
+- [x] `reconciliation_exceptions`: sinh `missing_internal` (dòng sao không có chứng từ),
+      `missing_statement` (phiếu đã ghi sổ không có dòng sao), `amount_mismatch` (tầng 1 khớp mã nhưng lệch
+      tiền ⇒ **không** khớp, để lại ngoại lệ). Các loại `late_event_conflict`/`unresolved_provider_status`
+      đã có từ P2.1.
+- [x] Quy trình thủ công: xác nhận dòng khớp (ghép tay, bắt buộc ghi chú khi lệch tiền), gỡ dòng khớp
+      (luôn để lại lý do), tạo bút toán phí/lãi ngân hàng (`source_type = bank_transaction`, đi qua
+      `JournalsService`, cập nhật trạng thái dòng trong cùng transaction).
+- [x] Cron `reconciliation-catchup` (01:30 hằng ngày) quét mọi sao kê còn `imported` để đối soát bù.
+      **Chưa có** hàng đợi `dead-letter` riêng (⏳ mục 9 — để mở).
+
+**Quyết định kỹ thuật đã kiểm chứng:**
+
+- **Số tiền dòng sao LUÔN dương**, chiều nằm ở cột `direction`. File CSV có ký hiệu +/- được đọc đúng
+  (số âm ⇒ `out`), nhưng DB không bao giờ lưu số âm — mọi so sánh số tiền là so sánh tuyệt đối.
+- **Không đoán chiều tiền.** Thiếu cột `direction` và số tiền không có dấu ⇒ báo lỗi kèm số dòng, không
+  âm thầm gán `in`.
+- **Tầng 3 chỉ là gợi ý.** Diện giải chứa mã chứng từ ⇒ `suggested`, phải có người bấm xác nhận; không
+  bao giờ tự chuyển sang `matched`.
+- **Chống trùng theo khóa nghiệp vụ** `(accountId, bankRef, amount, transactionDate)` — nạp lại cùng file
+  không tạo dòng thứ hai; hai tiến trình nạp cùng dòng thì unique index chặn.
+- **Chốt sao kê là bất biến**: còn dòng `unmatched`/`suggested` ⇒ 409; số dư cuối phải khớp số đầu +
+  Σ vào − Σ ra (khi cả ba được khai).
+- **Bỏ dấu tiếng Việt** khi chuẩn hóa tên cột CSV — "Số tiền" / "Ngày giao dịch" tự khớp alias
+  `so_tien` / `ngay_giao_dich`.
+
+**API:** `GET/POST /api/reconciliation/statements` (POST trả 202 + job id),
+`GET /api/reconciliation/statements/:id`,
+`POST /api/reconciliation/statements/:id/reconcile`, `POST /:id/resolve` (chốt),
+`GET /api/reconciliation/transactions`,
+`POST /api/reconciliation/transactions/:id/confirm-match`, `POST /:id/adjustment` (phí/lãi),
+`GET /api/reconciliation/matches`, `DELETE /api/reconciliation/matches/:id`.
+
+**Kiểm thử:** `csv-json-statement.adapter.spec.ts` (6 test — CSV và JSON cho ra **cùng**
+`NormalizedBankTransaction`, tên cột tiếng Việt, dấu phẩy trong ngoặc kép, báo lỗi rõ ràng),
+`bank-match.util.spec.ts` (11 test — ưu tiên tầng, không khớp sai tiền/sai chiều, tầng 3 chỉ gợi ý),
+`reconciliation.service.spec.ts` (11 test — chống trùng khi nạp lại, adapter API từ chối, thiếu nội bộ
+⇒ `missing_internal`, chốt bất biến + số dư lệch bị chặn, bắt buộc ghi chú khi lệch tiền, bút toán
+phí/lãi cập nhật trạng thái trong cùng transaction).
+
+**Nghiệm thu P2.2/P2.3 — trạng thái thật:**
+
+| Tiêu chí | Kết quả |
+| -------- | ------- |
+| `tsc --noEmit` · `oxlint` · `vitest` · `nest build` | ✅ exit 0 · 0 warning/0 error · **234/234** · exit 0 |
+| CSV và adapter API giả ⇒ cùng vào `bank_transactions`, cùng bảng khớp | ✅ cùng interface `StatementSourceAdapter`, cùng `NormalizedBankTransaction[]` (unit test CSV↔JSON) |
+| Khớp 3 tầng + không đoán bừa | ✅ `bank-match.util.spec.ts` |
+| Chốt sao kê bất biến + số dư lệch bị chặn | ✅ `reconciliation.service.spec.ts` |
+| Chạy một mạch qua HTTP với DB thật (nạp file → khớp → chốt) | ⛔ **CHƯA kiểm chứng** — máy dev không có PostgreSQL. Phải chạy lại khi có DB. |
+
+**Việc còn lại của 10.B:** hàng đợi `dead-letter` (⏳ mục 9), FE `/reconciliation` (nhập sao kê, bảng
+khớp, danh sách lệch + xử lý). Khi thêm giá trị enum mới cho Postgres (`synchronize: false`):
+`ALTER TYPE bank_transaction_direction_enum ADD VALUE 'in';` / `'out';`
+`ALTER TYPE bank_transaction_source_enum ADD VALUE 'file';` / `'api';`
+`ALTER TYPE reconciliation_match_status_enum ADD VALUE 'matched';` / `'suggested';` / `'unmatched';`
+`ALTER TYPE reconciliation_match_tier_enum ADD VALUE '1';` / `'2';` / `'3';` / `'4';`
+`ALTER TYPE reconciliation_match_target_type_enum ADD VALUE 'payment';` / `'journal_entry';`
+`ALTER TYPE bank_statement_status_enum ADD VALUE 'imported';` / `'reconciled';`
+(chỉ các giá trị chưa có — nếu TypeORM đã tự tạo enum ở lần `synchronize` đầu thì bỏ qua).
 
 **Nghiệm thu P2:** kịch bản "provider timeout ở lần gọi đầu" chạy end-to-end ⇒ cuối cùng intent `settled`,
 **đúng một** bút toán, có vết audit giải thích từng bước. Và: nạp một file CSV **và** một adapter API giả

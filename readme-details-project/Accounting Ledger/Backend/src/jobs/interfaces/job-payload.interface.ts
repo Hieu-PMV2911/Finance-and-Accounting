@@ -68,6 +68,32 @@ export interface OverdueInvoiceSweepPayload extends JobPayloadBase {
   asOfDate?: string;
 }
 
+/** `statements` · `import-statement` (mục 10.B — P2.2) */
+export interface ImportStatementPayload extends JobPayloadBase {
+  accountId: string;
+  /** `file` (mặc định) hoặc `api`. */
+  source?: string;
+  sourceRef?: string;
+  statementDate?: string;
+  openingBalance?: string;
+  closingBalance?: string;
+  /** Toàn bộ nội dung file CSV/JSON. */
+  content: string;
+  /** Người yêu cầu nạp — để ghi vết. */
+  actorId?: string;
+}
+
+/** `statements` · `reconcile-statement` (mục 10.B — P2.3) */
+export interface ReconcileStatementPayload extends JobPayloadBase {
+  statementId: string;
+}
+
+/** `statements` · `reconciliation-catchup` (mục 10.B — P2.3) */
+export interface ReconciliationCatchupPayload extends JobPayloadBase {
+  /** Số sao kê đối soát tối đa trong một lượt (mặc định 50). */
+  limit?: number;
+}
+
 /** `payments` · `payment-status-poll` (mục 10.B) */
 export interface PaymentStatusPollPayload extends JobPayloadBase {
   /** Số intent tra cứu trong một lượt (mặc định 50). */

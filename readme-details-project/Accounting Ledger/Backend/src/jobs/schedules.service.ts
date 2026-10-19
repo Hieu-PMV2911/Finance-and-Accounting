@@ -40,6 +40,13 @@ export const WEBHOOK_SWEEP_CRON = '*/5 * * * *';
  * dừng hẳn sau N lần).
  */
 export const PAYMENT_STATUS_POLL_CRON = '*/2 * * * *';
+/**
+ * 01:30 hằng ngày — đối soát bù các sao kê còn `imported`.
+ *
+ * Chạy sau khi số dư đã chốt (01:00) và trước giờ làm việc; bắt kịp các dòng
+ * mới nạp hoặc phiếu mới ghi sổ mà chưa bấm đối soát thủ công.
+ */
+export const RECONCILIATION_CATCHUP_CRON = '30 1 * * *';
 
 export const SCHEDULE_DEFINITIONS: readonly ScheduleDefinition[] = [
   {
@@ -90,6 +97,16 @@ export const SCHEDULE_DEFINITIONS: readonly ScheduleDefinition[] = [
     cron: PAYMENT_STATUS_POLL_CRON,
     queue: JobQueue.PAYMENTS,
     jobName: JobName.PAYMENT_STATUS_POLL,
+    payload: { limit: 50 },
+  },
+  {
+    name: 'reconciliation-catchup',
+    label: 'Đối soát bù sao kê',
+    description:
+      'Quét mọi sao kê còn "đã nạp, chờ đối soát" và chạy pipeline 3 tầng — bắt kịp khi có dòng mới nạp hoặc phiếu mới ghi sổ. Không có gì để đối soát thì không làm gì.',
+    cron: RECONCILIATION_CATCHUP_CRON,
+    queue: JobQueue.STATEMENTS,
+    jobName: JobName.RECONCILIATION_CATCHUP,
     payload: { limit: 50 },
   },
   {

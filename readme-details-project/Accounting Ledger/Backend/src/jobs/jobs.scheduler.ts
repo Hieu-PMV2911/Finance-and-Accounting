@@ -7,6 +7,7 @@ import {
   INTEGRITY_CHECK_CRON,
   OVERDUE_INVOICE_SWEEP_CRON,
   PAYMENT_STATUS_POLL_CRON,
+  RECONCILIATION_CATCHUP_CRON,
   SchedulesService,
   WEBHOOK_SWEEP_CRON,
 } from './schedules.service.js';
@@ -62,5 +63,11 @@ export class JobsScheduler {
   @Cron(PAYMENT_STATUS_POLL_CRON)
   async schedulePaymentStatusPoll(): Promise<void> {
     await this.schedules.runScheduled('payment-status-poll');
+  }
+
+  /** 01:30 hằng ngày — đối soát bù sao kê (mục 10.B). */
+  @Cron(RECONCILIATION_CATCHUP_CRON)
+  async scheduleReconciliationCatchup(): Promise<void> {
+    await this.schedules.runScheduled('reconciliation-catchup');
   }
 }

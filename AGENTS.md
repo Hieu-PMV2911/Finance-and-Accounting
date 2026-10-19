@@ -534,8 +534,29 @@ Ngoại lệ là **hàng đợi việc cho con người**: `late_event_conflict`
 > mang `SYSTEM_ACTOR_ID` (UUID rỗng), không mượn danh người lập. Cron `payment-status-poll` (2 phút,
 > hàng đợi `payments`) tra cứu tới ngưỡng `PAYMENT_INTENT_MAX_POLLS` (mặc định 5) rồi leo thang và dừng.
 
-> ⚠️ **Chưa có API**: sao kê & khớp (`bank_statements`, `bank_transactions`, `reconciliation_matches`) —
-> thuộc **10.B P2.2/P2.3**.
+**Reconciliation** (`/api/reconciliation`, mục 10.B — P2.2/P2.3 — sao kê ngân hàng + khớp 3 tầng):
+
+| Method | Route | Quyền | Ghi chú |
+| ------ | ----- | ----- | ------- |
+| GET    | `/api/reconciliation/statements` | đã đăng nhập | lọc `accountId`/`status` |
+| GET    | `/api/reconciliation/statements/:id` | đã đăng nhập | |
+| POST   | `/api/reconciliation/statements` | **admin, poster** | nạp CSV/JSON qua job `statements`; trả **202 + jobRunId** |
+| POST   | `/api/reconciliation/statements/:id/reconcile` | **admin, poster** | chạy pipeline 3 tầng |
+| POST   | `/api/reconciliation/statements/:id/resolve` | **admin, poster** | chốt — **bất biến**; còn dòng chưa khớp ⇒ **409** |
+| GET    | `/api/reconciliation/transactions` | đã đăng nhập | lọc `statementId`/`matchStatus`/`direction`/ngày/`search` |
+| POST   | `/api/reconciliation/transactions/:id/confirm-match` | **admin, poster** | khớp tay; lệch tiền ⇒ bắt buộc `note` |
+| POST   | `/api/reconciliation/transactions/:id/adjustment` | **admin, poster** | bút toán phí/lãi (`source_type = bank_transaction`) |
+| GET    | `/api/reconciliation/matches` | đã đăng nhập | lọc `targetType`/`targetId` |
+| DELETE | `/api/reconciliation/matches/:id` | **admin, poster** | gỡ dòng khớp, để lại lý do (**204**) |
+
+> **Một pipeline cho mọi nguồn sao kê**: `CsvJsonStatementAdapter` (file CSV/JSON, hoạt động) và
+> `BankApiStatementAdapter` (API ngân hàng, khung rỗng) cùng implement `StatementSourceAdapter` ⇒
+> `NormalizedBankTransaction[]` giống hệt nhau. Parser không chứa logic khớp; logic khớp không biết nguồn.
+> Khớp **3 tầng** (tham chiếu+tiền · tiền+ngày±N · gợi ý mờ); tầng 3 chỉ là `suggested`, phải người xác
+> nhận. Số tiền dòng sao **luôn dương**, chiều ở cột `direction`. Cron `reconciliation-catchup` (01:30)
+> đối soát bù mọi sao kê còn `imported`. Biến: `RECONCILIATION_DATE_TOLERANCE_DAYS` (mặc định 3).
+>
+> ⏳ **Chưa có**: hàng đợi `dead-letter` riêng cho job thất bại vĩnh viễn (mục 9) và FE `/reconciliation`.
 
 > **Webhook event** của 10.A: `sales_invoice.posted`, `vendor_bill.posted`, `payment.posted`,
 > `invoice.overdue` (cùng các event cũ `journal.posted`, `journal.reversed`, `period.closed`,
@@ -585,7 +606,10 @@ Ngoại lệ là **hàng đợi việc cho con người**: `late_event_conflict`
   ✅ **10.B P2.1** vòng đời thanh toán qua provider (`payment_intents`) + `reconciliation_exceptions` +
   cron `payment-status-poll`: timeout ⇒ `unknown` (không phải thất bại), captured ⇒ ghi sổ đúng một lần,
   kết quả đến trễ ⇒ **không ghi đè** + ngoại lệ, quá ngưỡng ⇒ leo thang. Chi tiết: `MUC-10-TIEP-THEO.md`.
-  ⏳ **10.B P2.2/P2.3** sao kê ngân hàng + khớp 3 tầng + dead-letter → **10.C** đa tiền tệ, thuế, đa công ty. Mọi chứng từ mục 10 ghi sổ **qua `JournalsService`**
+  ✅ **10.B P2.2/P2.3** sao kê ngân hàng (`bank_statements`/`bank_transactions`/`reconciliation_matches`)
+  + **một pipeline cho mọi nguồn** (`StatementSourceAdapter`) + **khớp 3 tầng** + cron `reconciliation-catchup`
+  + bút toán phí/lãi + hàng đợi `statements`. ⏳ còn `dead-letter` (mục 9) và FE `/reconciliation` →
+  **10.C** đa tiền tệ, thuế, đa công ty. Mọi chứng từ mục 10 ghi sổ **qua `JournalsService`**
   (không có bộ máy ghi sổ thứ hai) và **một chứng từ nguồn chỉ sinh một bút toán gốc**.
 
 ---

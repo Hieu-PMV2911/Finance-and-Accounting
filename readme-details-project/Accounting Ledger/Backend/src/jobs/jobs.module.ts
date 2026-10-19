@@ -19,8 +19,10 @@ import { NotificationsController } from './notifications.controller.js';
 import { NotificationsService } from './notifications.service.js';
 import { OverdueInvoiceSweepService } from './overdue-invoice-sweep.service.js';
 import { PaymentPollRegistry } from './payment-poll.registry.js';
+import { ReconciliationRegistry } from './reconciliation-registry.js';
 import { MaintenanceProcessor } from './processors/maintenance.processor.js';
 import { PaymentsProcessor } from './processors/payments.processor.js';
+import { StatementsProcessor } from './processors/statements.processor.js';
 import { NotificationsProcessor } from './processors/notifications.processor.js';
 import { ReportsProcessor } from './processors/reports.processor.js';
 import { WebhooksProcessor } from './processors/webhooks.processor.js';
@@ -42,10 +44,12 @@ import { WebhooksService } from './webhooks.service.js';
  * | `notifications` | ghi thông báo, nhắc công nợ, quét hóa đơn quá hạn | 5 |
  * | `webhooks` | giao webhook ra ngoài | 5 |
  * | `payments` | tra cứu trạng thái giao dịch tại provider (mục 10.B) | 3 |
+ * | `statements` | nạp & đối soát sao kê ngân hàng (mục 10.B) | 3 |
  *
  * Worker `payments` gọi nghiệp vụ qua `PaymentPollRegistry`: module thanh toán
  * đăng ký chính nó lúc khởi động, nên `JobsModule` không phải import
  * `PaymentIntentsModule` (module kia đã import `JobsModule`).
+ * Worker `statements` dùng `ReconciliationRegistry` theo cùng cách.
  *
  * `BullModule.registerQueue` chỉ khai báo hàng đợi; kết nối Redis lấy từ
  * `BullModule.forRootAsync` trong `AppModule` nên cấu hình nằm một chỗ.
@@ -61,6 +65,7 @@ import { WebhooksService } from './webhooks.service.js';
       { name: JobQueue.NOTIFICATIONS },
       { name: JobQueue.WEBHOOKS },
       { name: JobQueue.PAYMENTS },
+      { name: JobQueue.STATEMENTS },
     ),
     TypeOrmModule.forFeature([
       JobRun,
@@ -80,6 +85,7 @@ import { WebhooksService } from './webhooks.service.js';
     ReportStorageService,
     JobsScheduler,
     PaymentPollRegistry,
+    ReconciliationRegistry,
 
     // Nghiệp vụ chạy nền
     IntegrityService,
@@ -95,6 +101,7 @@ import { WebhooksService } from './webhooks.service.js';
     NotificationsProcessor,
     WebhooksProcessor,
     PaymentsProcessor,
+    StatementsProcessor,
   ],
   exports: [
     NotificationsService,
@@ -102,6 +109,7 @@ import { WebhooksService } from './webhooks.service.js';
     QueueService,
     JobRunsService,
     PaymentPollRegistry,
+    ReconciliationRegistry,
   ],
 })
 export class JobsModule {}

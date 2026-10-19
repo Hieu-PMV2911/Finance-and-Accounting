@@ -20,6 +20,11 @@ export enum JobQueue {
    * job nhắc nợ/quét hóa đơn.
    */
   PAYMENTS = 'payments',
+  /**
+   * Nạp & đối soát sao kê ngân hàng (mục 10.B — P2.2/P2.3).
+   * Nạp file chạy nền để request không bị chặn đọc/giải mã file lớn.
+   */
+  STATEMENTS = 'statements',
 }
 
 export const ALL_JOB_QUEUES: readonly JobQueue[] = Object.values(JobQueue);
@@ -30,6 +35,7 @@ export const JOB_QUEUE_LABELS: Record<JobQueue, string> = {
   [JobQueue.NOTIFICATIONS]: 'Gửi thông báo',
   [JobQueue.WEBHOOKS]: 'Webhook',
   [JobQueue.PAYMENTS]: 'Trạng thái thanh toán',
+  [JobQueue.STATEMENTS]: 'Sao kê ngân hàng',
 };
 
 /** Tên job bên trong từng hàng đợi. */
@@ -52,6 +58,12 @@ export enum JobName {
   WEBHOOK_SWEEP = 'webhook-sweep',
   /** `payments`: tra cứu provider cho các intent chưa có kết luận (mục 10.B). */
   PAYMENT_STATUS_POLL = 'payment-status-poll',
+  /** `statements`: nạp một lô sao kê (P2.2). */
+  IMPORT_STATEMENT = 'import-statement',
+  /** `statements`: chạy pipeline đối soát 3 tầng cho một sao kê (P2.3). */
+  RECONCILE_STATEMENT = 'reconcile-statement',
+  /** `statements`: quét mọi sao kê còn `imported` để đối soát bù (P2.3). */
+  RECONCILIATION_CATCHUP = 'reconciliation-catchup',
 }
 
 export const ALL_JOB_NAMES: readonly JobName[] = Object.values(JobName);
