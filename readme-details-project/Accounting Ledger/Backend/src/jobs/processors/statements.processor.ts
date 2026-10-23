@@ -8,6 +8,7 @@ import type {
   ReconciliationCatchupPayload,
 } from '../interfaces/job-payload.interface.js';
 import { JobRunsService } from '../job-runs.service.js';
+import { QueueService } from '../queue.service.js';
 import { ReconciliationRegistry } from '../reconciliation-registry.js';
 import { TrackedWorkerHost } from './tracked-worker-host.js';
 
@@ -29,9 +30,10 @@ import { TrackedWorkerHost } from './tracked-worker-host.js';
 export class StatementsProcessor extends TrackedWorkerHost {
   constructor(
     runs: JobRunsService,
+    queues: QueueService,
     private readonly registry: ReconciliationRegistry,
   ) {
-    super(runs);
+    super(runs, queues);
   }
 
   protected async handle(job: Job): Promise<Record<string, unknown>> {

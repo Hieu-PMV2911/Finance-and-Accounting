@@ -41,7 +41,7 @@ export const WEBHOOK_SWEEP_CRON = '*/5 * * * *';
  */
 export const PAYMENT_STATUS_POLL_CRON = '*/2 * * * *';
 /**
- * 01:30 hằng ngày — đối soát bù các sao kê còn `imported`.
+ * 01:30 hằng ngày — đối soát bù các sao kê còn `imported` + báo cáo lệch tồn đọng.
  *
  * Chạy sau khi số dư đã chốt (01:00) và trước giờ làm việc; bắt kịp các dòng
  * mới nạp hoặc phiếu mới ghi sổ mà chưa bấm đối soát thủ công.
@@ -117,6 +117,26 @@ export const SCHEDULE_DEFINITIONS: readonly ScheduleDefinition[] = [
     cron: WEBHOOK_SWEEP_CRON,
     queue: JobQueue.MAINTENANCE,
     jobName: JobName.WEBHOOK_SWEEP,
+    payload: {},
+  },
+  {
+    name: 'payment-status-poll',
+    label: 'Tra cứu trạng thái thanh toán',
+    description:
+      'Quét các yêu cầu thanh toán chưa kết luận (kể cả unknown do timeout) rồi tra cứu lại provider bằng đúng idempotencyKey. Chỉ ghi sổ khi có bằng chứng đã thu tiền; quá số lần cho phép thì cảnh báo chứ KHÔNG tự kết luận thất bại.',
+    cron: PAYMENT_STATUS_POLL_CRON,
+    queue: JobQueue.PAYMENTS,
+    jobName: JobName.PAYMENT_STATUS_POLL,
+    payload: {},
+  },
+  {
+    name: 'reconciliation-catchup',
+    label: 'Đối soát bổ sung',
+    description:
+      'Khớp lại toàn bộ sao kê còn mở và tổng hợp danh sách giao dịch lệch tồn đọng.',
+    cron: RECONCILIATION_CATCHUP_CRON,
+    queue: JobQueue.STATEMENTS,
+    jobName: JobName.RECONCILIATION_CATCHUP,
     payload: {},
   },
 ];

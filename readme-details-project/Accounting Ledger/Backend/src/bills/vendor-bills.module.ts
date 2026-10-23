@@ -9,6 +9,8 @@ import { FiscalPeriodsModule } from '../fiscal-periods/fiscal-periods.module.js'
 import { JobsModule } from '../jobs/jobs.module.js';
 import { JournalsModule } from '../journals/journals.module.js';
 import { PartiesModule } from '../parties/parties.module.js';
+// Mục 10.C.2 — giải thuế GTGT đầu vào cho dòng hóa đơn mua + sinh dòng bút toán thuế khi ghi sổ.
+import { TaxesModule } from '../taxes/taxes.module.js';
 import { VendorBill, VendorBillLine } from './entities/vendor-bill.entity.js';
 import { VendorBillsController } from './vendor-bills.controller.js';
 import { VendorBillsService } from './vendor-bills.service.js';
@@ -25,6 +27,8 @@ import { VendorBillsService } from './vendor-bills.service.js';
     FiscalPeriodsModule,
     JournalsModule,
     JobsModule,
+    // Mục 10.C.2 — mã thuế + tài khoản 1331.
+    TaxesModule,
   ],
   controllers: [VendorBillsController],
   providers: [VendorBillsService],

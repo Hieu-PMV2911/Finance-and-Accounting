@@ -3,7 +3,9 @@ import { WorkerHost } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 
 import type { JobPayloadBase } from '../interfaces/job-payload.interface.js';
+import { JobQueue } from '../enums/job.enum.js';
 import { JobRunsService } from '../job-runs.service.js';
+import { QueueService } from '../queue.service.js';
 
 /**
  * Lấy id dòng `job_runs` của một job.
@@ -35,7 +37,12 @@ export function jobRunIdOf(job: Job): string | null {
 export abstract class TrackedWorkerHost extends WorkerHost {
   protected readonly logger = new Logger(this.constructor.name);
 
-  protected constructor(private readonly runs: JobRunsService) {
+  protected constructor(
+    private readonly runs: JobRunsService,
+    // Tên riêng (không phải `queue`) để lớp con vẫn khai báo được trường `queue`
+    // của chính nó mà không đụng độ trường private của lớp cha.
+    private readonly deadLetterSink: QueueService,
+  ) {
     super();
   }
 
@@ -69,6 +76,20 @@ export abstract class TrackedWorkerHost extends WorkerHost {
       this.logger.error(
         `Job ${job.name} (${job.id ?? 'không rõ id'}) thất bại lần ${attempt}/${maxAttempts}: ${message}`,
       );
+
+      // Hết lượt thử ⇒ chuyển sang hàng đợi thư chết để người vận hành thấy được
+      // (job ở đó không tự chạy lại nữa — phải xử lý bằng tay).
+      if (attempt >= maxAttempts) {
+        await this.deadLetterSink.archiveToDeadLetter({
+          sourceQueue: (job.queueName as JobQueue) ?? 'unknown',
+          sourceJobName: job.name,
+          sourceRunId: runId,
+          error: message,
+          attempts: attempt,
+          originalPayload: job.data as Record<string, unknown>,
+        });
+      }
+
       throw error;
     }
   }

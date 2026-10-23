@@ -22,3 +22,26 @@ export function partyAccountMessage(code: string): string {
     `${PARTY_ACCOUNT_PREFIXES.join('/')} mới gắn được đối tượng`
   );
 }
+
+/** Chiều số dư tự nhiên của tài khoản công nợ. */
+export type PartyAccountSide = 'receivable' | 'payable';
+
+/** TK 131 — phải thu khách hàng: số dư tự nhiên bên **Nợ**. */
+export const RECEIVABLE_ACCOUNT_PREFIX = '131';
+
+/** TK 331 — phải trả người bán: số dư tự nhiên bên **Có**. */
+export const PAYABLE_ACCOUNT_PREFIX = '331';
+
+/**
+ * Chiều công nợ của một tài khoản (mục 10.C.1).
+ *
+ * Vì sao cần phân biệt: chênh lệch tỷ giá **cùng một con số** mang nghĩa ngược nhau
+ * tuỳ chiều công nợ. Khách trả nhiều tiền hơn giá trị đã ghi nhận là **lãi** với
+ * phải thu (131), nhưng trả nhiều hơn cho nhà cung cấp là **lỗ** với phải trả (331).
+ * Nhầm chiều ở đây sẽ đảo dấu toàn bộ bút toán chênh lệch — lãi thành lỗ.
+ */
+export function partyAccountSide(code: string): PartyAccountSide | null {
+  if (code.startsWith(RECEIVABLE_ACCOUNT_PREFIX)) return 'receivable';
+  if (code.startsWith(PAYABLE_ACCOUNT_PREFIX)) return 'payable';
+  return null;
+}

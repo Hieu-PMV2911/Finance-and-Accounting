@@ -12,6 +12,7 @@ import { WebhookEndpoint } from './entities/webhook-endpoint.entity.js';
 import { WebhookEvent } from './entities/webhook-event.entity.js';
 import { JobQueue } from './enums/job.enum.js';
 import { IntegrityService } from './integrity.service.js';
+import { InboundEventRegistry } from './inbound-event-registry.service.js';
 import { JobRunsService } from './job-runs.service.js';
 import { JobsController } from './jobs.controller.js';
 import { JobsScheduler } from './jobs.scheduler.js';
@@ -20,6 +21,7 @@ import { NotificationsService } from './notifications.service.js';
 import { OverdueInvoiceSweepService } from './overdue-invoice-sweep.service.js';
 import { PaymentPollRegistry } from './payment-poll.registry.js';
 import { ReconciliationRegistry } from './reconciliation-registry.js';
+import { DeadLetterProcessor } from './processors/dead-letter.processor.js';
 import { MaintenanceProcessor } from './processors/maintenance.processor.js';
 import { PaymentsProcessor } from './processors/payments.processor.js';
 import { StatementsProcessor } from './processors/statements.processor.js';
@@ -35,7 +37,7 @@ import { WebhooksService } from './webhooks.service.js';
 /**
  * Xử lý bất đồng bộ (mục 9): **Queue (BullMQ) + Schedule (cron)**.
  *
- * Năm hàng đợi, mỗi hàng một processor:
+ * Bảy hàng đợi, mỗi hàng một processor:
  *
  * | Hàng đợi | Việc | Số lần thử |
  * |---|---|---|
@@ -45,6 +47,7 @@ import { WebhooksService } from './webhooks.service.js';
  * | `webhooks` | giao webhook ra ngoài | 5 |
  * | `payments` | tra cứu trạng thái giao dịch tại provider (mục 10.B) | 3 |
  * | `statements` | nạp & đối soát sao kê ngân hàng (mục 10.B) | 3 |
+ * | `dead-letter` | tập kết job hết lượt thử — không tự retry | 1 |
  *
  * Worker `payments` gọi nghiệp vụ qua `PaymentPollRegistry`: module thanh toán
  * đăng ký chính nó lúc khởi động, nên `JobsModule` không phải import
@@ -66,6 +69,8 @@ import { WebhooksService } from './webhooks.service.js';
       { name: JobQueue.WEBHOOKS },
       { name: JobQueue.PAYMENTS },
       { name: JobQueue.STATEMENTS },
+      // Thư chết: nơi tập kết job hết lượt thử (mục 9 ⏳ đã hoàn tất).
+      { name: JobQueue.DEAD_LETTER },
     ),
     TypeOrmModule.forFeature([
       JobRun,
@@ -86,6 +91,8 @@ import { WebhooksService } from './webhooks.service.js';
     JobsScheduler,
     PaymentPollRegistry,
     ReconciliationRegistry,
+    // Sổ đăng ký handler webhook nhận vào — module nghiệp vụ tự đăng ký (mục 10.B).
+    InboundEventRegistry,
 
     // Nghiệp vụ chạy nền
     IntegrityService,
@@ -102,6 +109,7 @@ import { WebhooksService } from './webhooks.service.js';
     WebhooksProcessor,
     PaymentsProcessor,
     StatementsProcessor,
+    DeadLetterProcessor,
   ],
   exports: [
     NotificationsService,
@@ -110,6 +118,7 @@ import { WebhooksService } from './webhooks.service.js';
     JobRunsService,
     PaymentPollRegistry,
     ReconciliationRegistry,
+    InboundEventRegistry,
   ],
 })
 export class JobsModule {}

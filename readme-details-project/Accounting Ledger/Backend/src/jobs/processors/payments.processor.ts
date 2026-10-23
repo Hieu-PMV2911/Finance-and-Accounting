@@ -5,6 +5,7 @@ import { JobName, JobQueue } from '../enums/job.enum.js';
 import type { PaymentStatusPollPayload } from '../interfaces/job-payload.interface.js';
 import { JobRunsService } from '../job-runs.service.js';
 import { PaymentPollRegistry } from '../payment-poll.registry.js';
+import { QueueService } from '../queue.service.js';
 import { TrackedWorkerHost } from './tracked-worker-host.js';
 
 /**
@@ -21,9 +22,10 @@ import { TrackedWorkerHost } from './tracked-worker-host.js';
 export class PaymentsProcessor extends TrackedWorkerHost {
   constructor(
     runs: JobRunsService,
+    queues: QueueService,
     private readonly polls: PaymentPollRegistry,
   ) {
-    super(runs);
+    super(runs, queues);
   }
 
   protected async handle(job: Job): Promise<Record<string, unknown>> {

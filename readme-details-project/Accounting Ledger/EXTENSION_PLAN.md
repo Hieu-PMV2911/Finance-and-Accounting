@@ -102,6 +102,9 @@ bốn chiều thông tin còn thiếu khiến mọi thứ (aging, đối soát, 
 | **10.B**  | Payment & Reconciliation — vòng đời thanh toán, webhook, sao kê, danh sách lệch | 6–8 tuần  | 10.0 (và 10.A để đối soát có nghĩa) |
 | **10.C**  | Nâng cao: đa tiền tệ → thuế → đa công ty                                        | 4–6 tuần  | 10.A + 10.B                         |
 
+> **Trạng thái:** ✅ 10.0, 10.A, **10.B** (BE) và **10.C.1 + 10.C.2** (đa tiền tệ, thuế GTGT) đã triển khai
+> — chi tiết + bằng chứng ở `MUC-10-TIEP-THEO.md` §5–§6. ⏳ còn **10.C.3 (đa công ty)** và các trang FE.
+
 > `Future-project.txt` liệt kê Payment là "Dự án 2"; nhưng **đối soát chỉ có nghĩa khi đã có giao
 > dịch nội bộ để đối chiếu** (hóa đơn + phiếu thu/chi + công nợ). Vì vậy bản kế hoạch này đảo thứ
 > tự thực thi (10.A trước 10.B) — nếu muốn giữ đúng thứ tự tài liệu gốc thì 10.B vẫn chạy được trên
@@ -275,7 +278,10 @@ kê, bảng khớp, danh sách lệch + xử lý).
 
 ### 10.C — Nâng cao (4–6 tuần)
 
-**Đa tiền tệ (làm trước tiên trong nhóm này)**
+> ✅ **10.C.1 (đa tiền tệ) và 10.C.2 (thuế GTGT) đã xong** — xem bằng chứng triển khai ở
+> `MUC-10-TIEP-THEO.md` §6. ⏳ 10.C.3 (đa công ty) còn lại.
+
+**Đa tiền tệ (làm trước tiên trong nhóm này)** ✅ HOÀN THÀNH
 
 - `currencies` (`code`, `name`, `decimals`, `isBase`) + `exchange_rates` (`currencyCode`, `rateDate`,
   `rate`, `source`, `UNIQUE(currencyCode, rateDate)`).
@@ -287,14 +293,14 @@ kê, bảng khớp, danh sách lệch + xử lý).
   ngoài. Tự động hóa lấy tỷ giá là hạng mục **tùy chọn về sau**; danh mục dịch vụ đã tra **không có
   nhà cung cấp tỷ giá FX nào**, nên nếu muốn thì phải khảo sát riêng trước khi tích hợp.
 
-**Thuế**
+**Thuế** ✅ HOÀN THÀNH
 
 - `tax_codes` (`code`, `name`, `rate`, `type` VAT/GTGT, `outputAccountId` 3331, `inputAccountId` 1331).
 - Thuế là **lớp tính trên dòng chứng từ** (hóa đơn lưu `taxRate`/`taxCode`), **không** nhập tay vào
   bút toán. Dòng thuế được sinh tự động khi post.
 - Báo cáo: tổng hợp GTGT đầu vào/đầu ra theo kỳ + xuất Excel (dùng lại `ReportExportService`).
 
-**Đa công ty (làm cuối, migration riêng)**
+**Đa công ty (làm cuối, migration riêng)** ⏳ CHƯA LÀM
 
 - `companies` (`code`, `name`, `taxCode`, `baseCurrency`, `isActive`); thêm `company_id` vào **mọi**
   bảng nghiệp vụ (accounts, fiscal_periods, journal_entries, journal_lines via entry, parties,
@@ -319,7 +325,10 @@ kê, bảng khớp, danh sách lệch + xử lý).
 | Phiếu thu/chi     | `GET/POST /api/payments`, `POST /:id/post`, `POST /:id/allocations`, `DELETE /:id/allocations/:allocationId`                                                                                                            | như trên                                  |
 | Thanh toán        | `GET/POST /api/payment-intents`, `GET /:id`, `POST /:id/refresh`                                                                                                                                                        | **admin, poster**                         |
 | Sao kê & đối soát | `POST/GET /api/bank-statements`, `GET /:id/lines`, `POST /api/bank-statements/:id/auto-match`, `POST /api/reconciliation-matches`, `DELETE /api/reconciliation-matches/:id`, `GET/PATCH /api/reconciliation-exceptions` | **admin, poster**                         |
-| Báo cáo           | `GET /api/reports/receivables-aging`, `/payables-aging`, `/revenue-by-party`, (10.C) `/tax-summary`, `/exchange-rates`                                                                                                  | đã đăng nhập                              |
+| Công ty (10.C.1)  | `GET/POST/PATCH/DELETE /api/companies`, `GET /api/companies/base-currency`, `/default`                                                                                                                                  | đọc: đã đăng nhập · ghi: **admin**        |
+| Tiền tệ & tỷ giá (10.C.1) | `GET/POST/PATCH/DELETE /api/currencies`, `GET/POST/DELETE /api/exchange-rates`, `GET /latest`, `/lookup`, `POST /api/journals/fx-difference` (+ `/preview`)                                                    | đọc: đã đăng nhập · ghi: **admin, maker** |
+| Thuế (10.C.2)     | `GET/POST/PATCH/DELETE /api/taxes`, `GET /api/taxes/:id/usage`                                                                                                                                                          | đọc: đã đăng nhập · ghi: **admin**        |
+| Báo cáo           | `GET /api/reports/receivables-aging`, `/payables-aging`, `/revenue-by-party`, `/vat` (10.C.2), `export/:kind` (`vat-input-output` xuất Excel/PDF)                                                                       | đã đăng nhập                              |
 
 Giữ nguyên quy ước mã HTTP hiện có: chuyển trạng thái trả **200**, tạo mới **201**, xóa **204**.
 Sửa hành vi ⇒ cập nhật bảng API ở `AGENTS.md` mục 8 (quy tắc làm việc #3).

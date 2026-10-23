@@ -15,16 +15,21 @@ export enum JobQueue {
   /** Gọi webhook ra hệ thống ngoài, có retry + backoff. */
   WEBHOOKS = 'webhooks',
   /**
-   * Tra cứu lại trạng thái giao dịch tại nhà cung cấp thanh toán (mục 10.B).
-   * Tách khỏi `notifications` để có nhịp riêng (2 phút) và không đội nhịp các
-   * job nhắc nợ/quét hóa đơn.
+   * Mục 10.B — vòng đời thanh toán: tra cứu provider, ghi sổ khi đã thu tiền.
+   * Backoff riêng vì việc này phụ thuộc hệ thống bên thứ ba (có thể chậm/timeout),
+   * và nhịp riêng (2 phút) để không đội nhịp các job nhắc nợ/quét hóa đơn.
    */
   PAYMENTS = 'payments',
   /**
-   * Nạp & đối soát sao kê ngân hàng (mục 10.B — P2.2/P2.3).
+   * Mục 10.B — nạp & đối soát sao kê ngân hàng (nặng, chạy nền).
    * Nạp file chạy nền để request không bị chặn đọc/giải mã file lớn.
    */
   STATEMENTS = 'statements',
+  /**
+   * Hàng đợi **thư chết**: job đã hết số lần thử được chuyển về đây để người vận
+   * hành nhìn thấy và xử lý — hoàn tất hạng mục ⏳ của mục 9. Không tự retry nữa.
+   */
+  DEAD_LETTER = 'dead-letter',
 }
 
 export const ALL_JOB_QUEUES: readonly JobQueue[] = Object.values(JobQueue);
@@ -34,8 +39,9 @@ export const JOB_QUEUE_LABELS: Record<JobQueue, string> = {
   [JobQueue.MAINTENANCE]: 'Bảo trì định kỳ',
   [JobQueue.NOTIFICATIONS]: 'Gửi thông báo',
   [JobQueue.WEBHOOKS]: 'Webhook',
-  [JobQueue.PAYMENTS]: 'Trạng thái thanh toán',
-  [JobQueue.STATEMENTS]: 'Sao kê ngân hàng',
+  [JobQueue.PAYMENTS]: 'Thanh toán',
+  [JobQueue.STATEMENTS]: 'Sao kê & đối soát',
+  [JobQueue.DEAD_LETTER]: 'Thư chết',
 };
 
 /** Tên job bên trong từng hàng đợi. */
@@ -56,14 +62,20 @@ export enum JobName {
   DELIVER_WEBHOOK = 'deliver-webhook',
   /** `maintenance`: quét các lần giao webhook bị treo (mất job) rồi đẩy lại. */
   WEBHOOK_SWEEP = 'webhook-sweep',
-  /** `payments`: tra cứu provider cho các intent chưa có kết luận (mục 10.B). */
+  /**
+   * `payments` (10.B): quét các intent **chưa kết luận** rồi tra cứu provider.
+   * Đây là cơ chế biến `unknown` (timeout) thành kết luận thật, và ghi sổ khi
+   * provider xác nhận đã thu tiền — luôn dùng lại **cùng `idempotencyKey`**.
+   */
   PAYMENT_STATUS_POLL = 'payment-status-poll',
-  /** `statements`: nạp một lô sao kê (P2.2). */
+  /** `statements` (10.B): nạp một lô sao kê → chuẩn hóa → chống trùng → khớp (P2.2). */
   IMPORT_STATEMENT = 'import-statement',
-  /** `statements`: chạy pipeline đối soát 3 tầng cho một sao kê (P2.3). */
+  /** `statements` (10.B — P2.3): chạy pipeline đối soát 3 tầng cho một sao kê. */
   RECONCILE_STATEMENT = 'reconcile-statement',
-  /** `statements`: quét mọi sao kê còn `imported` để đối soát bù (P2.3). */
+  /** `statements` (10.B): khớp lại toàn bộ sao kê còn mở + báo cáo lệch tồn đọng. */
   RECONCILIATION_CATCHUP = 'reconciliation-catchup',
+  /** `dead-letter`: lưu vết job đã hết số lần thử (không thực thi nghiệp vụ). */
+  DEAD_LETTER_ARCHIVE = 'dead-letter-archive',
 }
 
 export const ALL_JOB_NAMES: readonly JobName[] = Object.values(JobName);

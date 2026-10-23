@@ -59,7 +59,12 @@ export class JobsScheduler {
     await this.schedules.runScheduled('webhook-retry-sweep');
   }
 
-  /** Mỗi 2 phút — tra cứu trạng thái thanh toán (mục 10.B). */
+  /**
+   * Mỗi 2 phút — tra cứu lại trạng thái thanh toán (mục 10.B).
+   *
+   * Đây là cơ chế trả lời trực tiếp yêu cầu gốc: *timeout không phải thất bại*.
+   * Intent nằm ở `unknown` sẽ được tra cứu lại cho tới khi có bằng chứng kết luận.
+   */
   @Cron(PAYMENT_STATUS_POLL_CRON)
   async schedulePaymentStatusPoll(): Promise<void> {
     await this.schedules.runScheduled('payment-status-poll');

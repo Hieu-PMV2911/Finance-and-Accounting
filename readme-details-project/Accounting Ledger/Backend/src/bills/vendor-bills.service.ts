@@ -31,6 +31,7 @@ import { JobTrigger } from '../jobs/enums/job.enum.js';
 import { WebhookEventType } from '../jobs/enums/webhook.enum.js';
 import { WebhooksService } from '../jobs/webhooks.service.js';
 import { PartiesService } from '../parties/parties.service.js';
+import { TaxCodesService } from '../taxes/tax-codes.service.js';
 import type {
   CreateVendorBillDto,
   CreateVendorBillLineDto,
@@ -56,6 +57,8 @@ export class VendorBillsService {
     private readonly periods: FiscalPeriodsService,
     private readonly journals: JournalsService,
     private readonly webhooks: WebhooksService,
+    // Mục 10.C.2 — thuế GTGT đầu vào: giải thuế suất cho dòng và tài khoản 1331.
+    private readonly taxes: TaxCodesService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -86,10 +89,18 @@ export class VendorBillsService {
     await this.parties.resolveActive(dto.partyId);
 
     const subtotal = toMoney(dto.subtotal);
-    const tax = toMoney(dto.taxAmount ?? '0');
     const total = toMoney(dto.total);
     const lineTotal = sumMoney(dto.lines.map((l) => l.amount));
     if (!lineTotal.equals(subtotal)) throw new BadRequestException('Tổng dòng phải bằng subtotal');
+
+    // Mục 10.C.2 — thuế GTGT đầu vào là lớp tính **trên dòng**; tổng thuế của hóa đơn là
+    // tổng các dòng. Khai sẵn mà lệch ⇒ từ chối (xem `TaxCodesService.resolveDocumentTaxes`).
+    const { lines: lineTaxes, headerTax: tax } =
+      await this.taxes.resolveDocumentTaxes(
+        dto.lines,
+        dto.taxAmount,
+        'hóa đơn mua',
+      );
     if (!subtotal.plus(tax).equals(total)) throw new BadRequestException('Subtotal + thuế phải bằng tổng tiền');
 
     // Mục 10.A — người lập thường **không** chọn tài khoản chi phí; hệ thống giải
@@ -125,6 +136,9 @@ export class VendorBillsService {
         quantity: moneyToString(l.quantity ?? '1.0000'),
         unitPrice: moneyToString(l.unitPrice ?? l.amount),
         amount: moneyToString(l.amount),
+        taxCodeId: lineTaxes[idx].taxCodeId,
+        taxRate: lineTaxes[idx].taxRate,
+        taxAmount: lineTaxes[idx].taxAmount,
       }),
     );
     await this.lines.save(lines);
@@ -152,8 +166,14 @@ export class VendorBillsService {
     });
 
     if (dto.lines) {
-      // Thay toàn bộ dòng ⇒ phải giải lại tài khoản cho từng dòng mới.
+      // Thay toàn bộ dòng ⇒ phải giải lại tài khoản **và thuế** cho từng dòng mới.
       const lineAccounts = await this.resolveLineAccounts(dto.lines, actor);
+      const { lines: lineTaxes, headerTax } =
+        await this.taxes.resolveDocumentTaxes(
+          dto.lines,
+          dto.taxAmount,
+          'hóa đơn mua',
+        );
       await this.lines.delete({ billId: bill.id });
       const lines = dto.lines.map((l, idx) =>
         this.lines.create({
@@ -164,11 +184,15 @@ export class VendorBillsService {
           quantity: moneyToString(l.quantity ?? '1.0000'),
           unitPrice: moneyToString(l.unitPrice ?? l.amount),
           amount: moneyToString(l.amount),
+          taxCodeId: lineTaxes[idx].taxCodeId,
+          taxRate: lineTaxes[idx].taxRate,
+          taxAmount: lineTaxes[idx].taxAmount,
         }),
       );
       await this.lines.save(lines);
+      // Tổng thuế luôn lấy theo dòng — không nhận một `taxAmount` rời khỏi dòng.
+      bill.taxAmount = moneyToString(headerTax);
       if (dto.subtotal !== undefined) bill.subtotal = moneyToString(dto.subtotal);
-      if (dto.taxAmount !== undefined) bill.taxAmount = moneyToString(dto.taxAmount);
       if (dto.total !== undefined) bill.total = moneyToString(dto.total);
     }
 
@@ -272,6 +296,15 @@ export class VendorBillsService {
     const lines = bill.lines || [];
     if (lines.length === 0) throw new BadRequestException('Hóa đơn mua không có dòng');
 
+    // Mục 10.C.2 — bất biến phải giữ **tại đây**: nếu thuế đầu hóa đơn lệch tổng thuế các
+    // dòng mà vẫn ghi sổ thì bút toán sai (mất cân bằng, hoặc cân bằng theo số sai).
+    const lineTaxTotal = sumMoney(lines.map((line) => line.taxAmount));
+    if (!lineTaxTotal.equals(toMoney(bill.taxAmount))) {
+      throw new ConflictException(
+        `Thuế trên hóa đơn mua (${moneyToString(bill.taxAmount)}) không khớp tổng thuế các dòng (${moneyToString(lineTaxTotal)}) — từ chối ghi sổ`,
+      );
+    }
+
     const journalLines: CreateJournalLineDto[] = [];
     // Debit expense lines
     for (const line of lines) {
@@ -279,6 +312,16 @@ export class VendorBillsService {
         accountId: line.accountId,
         debit: moneyToString(line.amount),
         description: line.description ?? bill.description ?? `Hóa đơn mua ${bill.billNo}`,
+      });
+    }
+    // Debit VAT input lines (mục 10.C.2) — thuế GTGT đầu vào được khấu trừ nên nằm bên
+    // **Nợ** TK 1331. Gộp theo tài khoản thuế đích để khớp sổ cái.
+    const vatGroups = await this.taxes.groupVatByAccount(lines, 'input');
+    for (const group of vatGroups) {
+      journalLines.push({
+        accountId: group.accountId,
+        debit: group.amount,
+        description: `Thuế GTGT đầu vào — hóa đơn mua ${bill.billNo}`,
       });
     }
     // Credit payable with party

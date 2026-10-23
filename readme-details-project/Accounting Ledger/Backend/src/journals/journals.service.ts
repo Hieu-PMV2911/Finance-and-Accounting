@@ -25,11 +25,18 @@ import {
   partyAccountMessage,
 } from '../common/utils/party-account.util.js';
 import {
+  convertToBase,
+  exceedsFxRateRange,
+  fxRateToString,
+} from '../common/utils/currency.util.js';
+import {
   exceedsMoneyRange,
+  moneyEquals,
   moneyToString,
   sumMoney,
   toMoney,
 } from '../common/utils/money.util.js';
+import { ExchangeRatesService } from '../currencies/exchange-rates.service.js';
 import type { FiscalPeriod } from '../fiscal-periods/entities/fiscal-period.entity.js';
 import { FiscalPeriodsService } from '../fiscal-periods/fiscal-periods.service.js';
 import { LedgerService } from '../ledger/ledger.service.js';
@@ -52,6 +59,19 @@ interface NormalizedLine {
   description: string | null;
   /** Đối tượng của sổ cái phụ (mục 10.0) — chỉ có ở dòng tài khoản công nợ. */
   partyId: string | null;
+  /** Ngoại tệ của dòng (mục 10.C.1) — `null` với dòng tiền hạch toán thuần. */
+  currency: string | null;
+  fxAmount: string | null;
+  fxRate: string | null;
+}
+
+/** Thông tin ngoại tệ đã giải xong cho một dòng. */
+interface ResolvedFxLine {
+  currency: string;
+  fxAmount: string;
+  fxRate: string;
+  /** Ngày của tỷ giá thật sự được dùng (có thể sớm hơn ngày hạch toán). */
+  rateDate: string;
 }
 
 interface NormalizedEntry {
@@ -85,6 +105,8 @@ export class JournalsService {
     private readonly periods: FiscalPeriodsService,
     private readonly ledger: LedgerService,
     private readonly parties: PartiesService,
+    // Mục 10.C.1 — tra tỷ giá khi dòng khai ngoại tệ mà không khai `fxRate`.
+    private readonly exchangeRates: ExchangeRatesService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -196,7 +218,7 @@ export class JournalsService {
       await this.assertSourceUnused(manager, sourceType, sourceId);
     }
 
-    const normalized = await this.normalizeLines(dto.lines);
+    const normalized = await this.normalizeLines(dto.lines, dto.date);
 
     const entry = manager.create(JournalEntry, {
       entryNo: null,
@@ -218,6 +240,9 @@ export class JournalsService {
           partyId: line.partyId,
           debit: line.debit,
           credit: line.credit,
+          currency: line.currency,
+          fxAmount: line.fxAmount,
+          fxRate: line.fxRate,
           description: line.description,
         }),
       ),
@@ -269,7 +294,7 @@ export class JournalsService {
     }
 
     if (dto.lines) {
-      const normalized = await this.normalizeLines(dto.lines);
+      const normalized = await this.normalizeLines(dto.lines, entry.date);
       entry.totalDebit = normalized.totalDebit;
       entry.totalCredit = normalized.totalCredit;
 
@@ -283,6 +308,9 @@ export class JournalsService {
           partyId: line.partyId,
           debit: line.debit,
           credit: line.credit,
+          currency: line.currency,
+          fxAmount: line.fxAmount,
+          fxRate: line.fxRate,
           description: line.description,
         }),
       );
@@ -506,6 +534,12 @@ export class JournalsService {
             // Hoán đổi Nợ ↔ Có.
             debit: moneyToString(line.credit),
             credit: moneyToString(line.debit),
+            // Ngoại tệ giữ **nguyên** (không hoán đổi): `fx_amount` là số tiền ngoại
+            // tệ của giao dịch gốc, không phải một bên Nợ/Có. Sao lại đúng tỷ giá gốc
+            // để bút toán đảo triệt tiêu chính xác cả tiền hạch toán lẫn ngoại tệ.
+            currency: line.currency,
+            fxAmount: line.fxAmount,
+            fxRate: line.fxRate,
             description: line.description,
           }),
         ),
@@ -649,9 +683,24 @@ export class JournalsService {
    * Chuẩn hóa và kiểm tra các dòng định khoản:
    * mỗi dòng chỉ một bên Nợ/Có và phải > 0; chỉ dùng tài khoản lá đang hoạt động;
    * cuối cùng bắt buộc Σ Nợ = Σ Có > 0.
+   *
+   * **Mục 10.C.1 — ngoại tệ.** Dòng khai `currency` khác đơn vị tiền hạch toán thì
+   * phải khai `fxAmount` (số tiền ngoại tệ). `fxRate` bỏ trống sẽ được **tra từ bảng
+   * tỷ giá theo ngày hạch toán**; thiếu tỷ giá là **lỗi chặn**, không tự lấy 1.
+   *
+   * Bất biến quan trọng nhất (quyết định #3): `debit`/`credit` **luôn** là tiền hạch
+   * toán và là con số **do người gọi cung cấp** — service không bao giờ tự ghi đè.
+   * Vai trò của cột ngoại tệ là *bằng chứng* cho con số đó, nên service **kiểm tra
+   * ngược**: `debit` (hoặc `credit`) phải đúng bằng `fxAmount × fxRate` (làm tròn 4
+   * chữ số). Lệch ⇒ 400 kèm cả hai con số, để người dùng sửa một lần là xong.
+   *
+   * Vì sao kiểm tra chặt thay vì tự nhân hộ: nếu service tự tính rồi ghi đè, một
+   * `fxRate` gõ sai sẽ âm thầm tạo ra số tiền hạch toán sai mà **không** ai thấy —
+   * trong khi Σ Nợ = Σ Có vẫn "đúng" nên không có lá chắn nào phát hiện.
    */
   private async normalizeLines(
     dtos: readonly CreateJournalLineDto[],
+    entryDate: string,
   ): Promise<NormalizedEntry> {
     if (dtos.length < 2) {
       throw new BadRequestException(
@@ -659,10 +708,18 @@ export class JournalsService {
       );
     }
 
+    const baseCurrency = await this.exchangeRates.baseCurrency();
     const lines: NormalizedLine[] = [];
 
     for (const [index, dto] of dtos.entries()) {
       const position = index + 1;
+      const fx = await this.resolveFxLine(
+        dto,
+        entryDate,
+        baseCurrency,
+        position,
+      );
+
       const debit = toMoney(dto.debit ?? 0);
       const credit = toMoney(dto.credit ?? 0);
 
@@ -685,6 +742,10 @@ export class JournalsService {
         );
       }
 
+      if (fx) {
+        this.assertFxConversionMatches(position, fx, hasDebit ? debit : credit);
+      }
+
       // Chỉ tài khoản lá đang hoạt động mới được ghi sổ.
       const account = await this.accounts.getPostable(dto.accountId);
 
@@ -705,6 +766,9 @@ export class JournalsService {
         partyId,
         debit: moneyToString(debit),
         credit: moneyToString(credit),
+        currency: fx?.currency ?? null,
+        fxAmount: fx?.fxAmount ?? null,
+        fxRate: fx?.fxRate ?? null,
         description: dto.description?.trim() || null,
       });
     }
@@ -715,6 +779,110 @@ export class JournalsService {
     this.assertBalanced(lines);
 
     return { lines, totalDebit, totalCredit };
+  }
+
+  /**
+   * Giải thông tin ngoại tệ của một dòng (mục 10.C.1).
+   *
+   * Trả `null` khi dòng là **tiền hạch toán thuần**. Ba trường hợp trả `null`:
+   * không khai `currency`, hoặc khai đúng bằng đơn vị tiền hạch toán. Trường hợp thứ
+   * hai là chủ ý: khai `currency = 'VND'` cho dòng nội tệ là dữ liệu thừa và sẽ khiến
+   * mọi báo cáo "dòng ngoại tệ" phải lọc thêm một điều kiện vô nghĩa.
+   */
+  private async resolveFxLine(
+    dto: CreateJournalLineDto,
+    entryDate: string,
+    baseCurrency: string,
+    position: number,
+  ): Promise<ResolvedFxLine | null> {
+    const currency = dto.currency?.trim().toUpperCase();
+    const hasFxAmount = dto.fxAmount !== undefined;
+    const hasFxRate = dto.fxRate !== undefined;
+
+    if (!currency) {
+      if (hasFxAmount || hasFxRate) {
+        throw new BadRequestException(
+          `Dòng ${position}: đã khai fxAmount/fxRate nhưng thiếu currency — ` +
+            'không xác định được ngoại tệ nào',
+        );
+      }
+      return null;
+    }
+
+    if (currency === baseCurrency) {
+      if (hasFxAmount || hasFxRate) {
+        throw new BadRequestException(
+          `Dòng ${position}: ${currency} là đơn vị tiền hạch toán — ` +
+            'không khai fxAmount/fxRate cho dòng nội tệ',
+        );
+      }
+      return null;
+    }
+
+    if (!hasFxAmount) {
+      throw new BadRequestException(
+        `Dòng ${position}: dòng ngoại tệ ${currency} phải khai fxAmount ` +
+          '(số tiền ngoại tệ) để quy đổi về ' + baseCurrency,
+      );
+    }
+
+    const fxAmount = toMoney(dto.fxAmount);
+    if (!fxAmount.greaterThan(0)) {
+      throw new BadRequestException(
+        `Dòng ${position}: fxAmount phải lớn hơn 0`,
+      );
+    }
+    if (exceedsMoneyRange(fxAmount)) {
+      throw new BadRequestException(
+        `Dòng ${position}: fxAmount vượt quá giới hạn NUMERIC(19,4)`,
+      );
+    }
+
+    if (hasFxRate) {
+      const rate = toMoney(dto.fxRate);
+      if (!rate.greaterThan(0)) {
+        throw new BadRequestException(
+          `Dòng ${position}: fxRate phải lớn hơn 0`,
+        );
+      }
+      if (exceedsFxRateRange(rate)) {
+        throw new BadRequestException(
+          `Dòng ${position}: fxRate vượt quá giới hạn NUMERIC(19,8)`,
+        );
+      }
+      return {
+        currency,
+        fxAmount: moneyToString(fxAmount),
+        fxRate: fxRateToString(rate),
+        rateDate: entryDate,
+      };
+    }
+
+    const resolved = await this.exchangeRates.requireRate(currency, entryDate);
+    return {
+      currency,
+      fxAmount: moneyToString(fxAmount),
+      fxRate: resolved.rate,
+      rateDate: resolved.rateDate,
+    };
+  }
+
+  /** `debit`/`credit` phải khớp `fxAmount × fxRate` — lệch là lỗi, không tự sửa. */
+  private assertFxConversionMatches(
+    position: number,
+    fx: ResolvedFxLine,
+    suppliedBase: ReturnType<typeof toMoney>,
+  ): void {
+    const expected = convertToBase(fx.fxAmount, fx.fxRate);
+    if (moneyEquals(suppliedBase, expected)) {
+      return;
+    }
+    throw new BadRequestException(
+      `Dòng ${position}: số tiền hạch toán ${moneyToString(suppliedBase)} không khớp quy đổi ` +
+        `${fx.fxAmount} ${fx.currency} × ${fx.fxRate} = ${expected} ` +
+        `(tỷ giá áp dụng ngày ${fx.rateDate}). ` +
+        `Hãy dùng ${expected}, hoặc sửa fxRate cho khớp.`,
+    );
   }
 
   /** Bất biến số 1: Σ Nợ = Σ Có, tổng > 0. */

@@ -143,4 +143,31 @@ export class VendorBillLine {
 
   @Column({ type: 'numeric', precision: 19, scale: 4, default: 0 })
   amount: string;
+
+  /**
+   * **Thuế của dòng** (mục 10.C.2) — xem `SalesInvoiceLine` để biết đầy đủ lý do.
+   *
+   * Khác biệt duy nhất so với hóa đơn bán: thuế đầu vào được **khấu trừ**, nên khi
+   * ghi sổ dòng thuế nằm bên **Nợ TK 1331** (tài sản) chứ không phải bên Có.
+   */
+  @Column({ name: 'tax_code_id', type: 'uuid', nullable: true })
+  taxCodeId: string | null;
+
+  @Column({
+    name: 'tax_rate',
+    type: 'numeric',
+    precision: 9,
+    scale: 4,
+    default: 0,
+  })
+  taxRate: string;
+
+  @Column({
+    name: 'tax_amount',
+    type: 'numeric',
+    precision: 19,
+    scale: 4,
+    default: 0,
+  })
+  taxAmount: string;
 }

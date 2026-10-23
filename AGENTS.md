@@ -375,7 +375,8 @@ Riêng `Frontend/`: `pnpm dev` (dev server), `pnpm build` (`tsc -b && vite build
 | GET    | `/api/reports/receivables-aging` | đã đăng nhập | `asOfDate` (mặc định hôm nay) + `partyId?` + `includeSettled?`; nhóm tuổi theo `dueDate` (≤30/31–60/61–90/>90 + chưa đến hạn + không có hạn); **Σ nhóm = Σ `outstanding`** |
 | GET    | `/api/reports/payables-aging`  | đã đăng nhập | như trên cho hóa đơn mua (`vendor_bills`)                                                                                                                   |
 | GET    | `/api/reports/revenue-by-party` | đã đăng nhập | `periodId` hoặc `fromDate`+`toDate`; doanh thu thuần 511 theo từng đối tượng (dòng không gắn đối tượng không tính)                                         |
-| GET    | `/api/reports/export/:kind`    | đã đăng nhập | `kind` ∈ {`profit-and-loss`, `balance-sheet`, `cash-flow`}; `format` ∈ {`xlsx`, `pdf`}; trả file (`StreamableFile`) |
+| GET    | `/api/reports/vat`             | đã đăng nhập | **mục 10.C.2** — bảng kê GTGT đầu vào/đầu ra theo kỳ; chỉ gồm chứng từ `posted`; `payable` = đầu ra − đầu vào (**âm** ⇒ còn được khấu trừ)                     |
+| GET    | `/api/reports/export/:kind`    | đã đăng nhập | `kind` ∈ {`profit-and-loss`, `balance-sheet`, `cash-flow`, `vat-input-output`}; `format` ∈ {`xlsx`, `pdf`}; trả file (`StreamableFile`) |
 
 **Audit** (`/api/audit-logs`, mục 8 — chỉ **admin**):
 
@@ -556,13 +557,84 @@ Ngoại lệ là **hàng đợi việc cho con người**: `late_event_conflict`
 > nhận. Số tiền dòng sao **luôn dương**, chiều ở cột `direction`. Cron `reconciliation-catchup` (01:30)
 > đối soát bù mọi sao kê còn `imported`. Biến: `RECONCILIATION_DATE_TOLERANCE_DAYS` (mặc định 3).
 >
-> ⏳ **Chưa có**: hàng đợi `dead-letter` riêng cho job thất bại vĩnh viễn (mục 9) và FE `/reconciliation`.
+> Lệch **không bị xoá**: đó là bằng chứng. Chỉ chuyển trạng thái kèm lý do.
+>
+> ⏳ **Chưa có**: FE `/reconciliation`. Hàng đợi `dead-letter` cho job thất bại vĩnh viễn (mục 9)
+> đã xong — job hết lượt thử được chuyển sang `dead-letter`, không tự retry.
 
 > **Webhook event** của 10.A: `sales_invoice.posted`, `vendor_bill.posted`, `payment.posted`,
 > `invoice.overdue` (cùng các event cũ `journal.posted`, `journal.reversed`, `period.closed`,
 > `integrity.violation`, `ping`). Sự kiện `*.posted` phát **ngay sau khi ghi sổ** với
 > `resourceRef` = id chứng từ; `invoice.overdue` do cron `overdue-invoice-sweep` (09:00 hằng ngày)
 > phát với `resourceRef = sweep:<ngày>` — chạy lại trong cùng ngày không gửi thêm lần nữa.
+
+**Mục 10.C.1 — đa tiền tệ (công ty + danh mục tiền + tỷ giá + chênh lệch tỷ giá):**
+
+**Companies** (`/api/companies`):
+
+| Method | Route                          | Quyền        | Ghi chú                                                                    |
+| ------ | ------------------------------ | ------------ | -------------------------------------------------------------------------- |
+| GET    | `/api/companies`               | đã đăng nhập | lọc theo trạng thái/từ khoá                                                 |
+| GET    | `/api/companies/base-currency` | đã đăng nhập | **đơn vị tiền hạch toán** đang hiệu lực (công ty mặc định → công ty đầu → `VND`) |
+| GET    | `/api/companies/default`       | đã đăng nhập | công ty mặc định                                                            |
+| GET    | `/api/companies/:id`           | đã đăng nhập |                                                                            |
+| POST   | `/api/companies`               | **admin**    | `code` duy nhất; công ty đầu tiên tự thành mặc định (**201**)                |
+| PATCH  | `/api/companies/:id`           | **admin**    |                                                                            |
+| DELETE | `/api/companies/:id`           | **admin**    | (**204**)                                                                  |
+
+**Currencies** (`/api/currencies`) — `code` là **khoá chính** (`[A-Z]{3}`):
+
+| Method | Route                    | Quyền             | Ghi chú                                                     |
+| ------ | ------------------------ | ----------------- | ----------------------------------------------------------- |
+| GET    | `/api/currencies`        | đã đăng nhập      | lọc theo trạng thái                                          |
+| GET    | `/api/currencies/:code`  | đã đăng nhập      |                                                             |
+| POST   | `/api/currencies`        | **admin, maker**  | (**201**)                                                   |
+| PATCH  | `/api/currencies/:code`  | **admin, maker**  |                                                             |
+| DELETE | `/api/currencies/:code`  | **admin**         | loại tiền hạch toán không xoá được (**204**)                 |
+
+**Exchange Rates** (`/api/exchange-rates`):
+
+| Method | Route                       | Quyền             | Ghi chú                                                                        |
+| ------ | --------------------------- | ----------------- | ------------------------------------------------------------------------------ |
+| GET    | `/api/exchange-rates`       | đã đăng nhập      | lọc theo loại tiền/khoảng ngày                                                  |
+| GET    | `/api/exchange-rates/latest` | đã đăng nhập     | tỷ giá mới nhất của **mỗi** loại tiền                                           |
+| GET    | `/api/exchange-rates/lookup` | đã đăng nhập     | tra tỷ giá áp cho một ngày — "tỷ giá mới nhất **không muộn hơn** ngày đó", cờ `fallback` báo tỷ giá cũ |
+| POST   | `/api/exchange-rates`       | **admin, maker**  | **upsert** theo `(currencyCode, rateDate)` (**201**)                            |
+| DELETE | `/api/exchange-rates/:id`   | **admin**         | (**204**)                                                                      |
+
+**Journals — chênh lệch tỷ giá** (`/api/journals`, bổ sung 10.C.1):
+
+| Method | Route                            | Quyền                     | Ghi chú                                                                |
+| ------ | -------------------------------- | ------------------------- | ---------------------------------------------------------------------- |
+| POST   | `/api/journals/fx-difference/preview` | **admin, maker, poster** | xem trước bút toán chênh lệch, **không** ghi sổ (**200**)          |
+| POST   | `/api/journals/fx-difference`    | **admin, poster**         | ghi sổ bút toán chênh lệch qua đúng `JournalsService` (**201**)        |
+
+> **Quyết định #3 (đã chốt):** `debit`/`credit` **luôn** là tiền hạch toán. Ngoại tệ nằm ở
+> `currency` / `fx_amount` / `fx_rate` **trên cùng dòng**, nên Σ Nợ = Σ Có không đổi và mọi
+> báo cáo/trial balance hiện có **không phải sửa**. Chênh lệch tỷ giá: **lãi** ⇒ Có `515`,
+> **lỗ** ⇒ Nợ `635`; đánh giá lại cuối kỳ dùng `413`.
+
+**Mục 10.C.2 — thuế GTGT:**
+
+**Taxes** (`/api/taxes`):
+
+| Method | Route                 | Quyền        | Ghi chú                                                                                              |
+| ------ | --------------------- | ------------ | ---------------------------------------------------------------------------------------------------- |
+| GET    | `/api/taxes`          | đã đăng nhập | lọc theo `type`/`isActive`/`search`                                                                    |
+| GET    | `/api/taxes/:id`      | đã đăng nhập |                                                                                                      |
+| GET    | `/api/taxes/:id/usage` | đã đăng nhập | số dòng chứng từ đang dùng → `deletable`                                                              |
+| POST   | `/api/taxes`          | **admin**    | `code` duy nhất; `rate` là **phần trăm** 0–100 (**201**)                                               |
+| PATCH  | `/api/taxes/:id`      | **admin**    | sửa thuế suất **không** làm đổi chứng từ đã lập (thuế suất đã sao vào dòng)                            |
+| DELETE | `/api/taxes/:id`      | **admin**    | mã đã gắn vào dòng chứng từ ⇒ **409**; ngừng sử dụng thay vì xoá (**204**)                             |
+
+> **Thuế là lớp tính trên DÒNG chứng từ.** Dòng hóa đơn/mua nhận `taxCodeId`; khi lập, hệ thống
+> **sao lại** thuế suất vào `tax_rate` và tính `tax_amount` — nên sửa danh mục về sau **không**
+> đổi số liệu cũ (cùng nguyên tắc với `journal_lines.fx_rate`).
+> Tổng thuế của chứng từ = **tổng các dòng đã làm tròn**; khai sẵn mà lệch ⇒ **400/409**, hệ thống
+> **không** tự sửa cho khớp (số tự sửa sẽ tạo bút toán cân bằng nhưng sai).
+> Dòng bút toán thuế **sinh tự động khi ghi sổ** (không nhập tay): bán ⇒ **Có 3331**, mua ⇒ **Nợ
+> 1331** (được khấu trừ); gom theo **tài khoản thuế đích** để khớp sổ cái. Tài khoản doanh thu/chi
+> phí vẫn do `AccountDefaultsService` quyết định — hai việc độc lập.
 
 **Health** — `GET /api/health` (public).
 

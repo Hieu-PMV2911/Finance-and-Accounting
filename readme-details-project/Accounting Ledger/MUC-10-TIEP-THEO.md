@@ -287,7 +287,7 @@ chạy `vite` thật và thao tác qua các luồng:
 
 ---
 
-## 5. Giai đoạn P2 — 10.B Payment & Reconciliation
+## 5. Giai đoạn P2 — 10.B Payment & Reconciliation ✅ HOÀN THÀNH
 
 ### P2.1 Vòng đời thanh toán (quyết định #6 của `EXTENSION_PLAN.md`) ✅ HOÀN THÀNH
 
@@ -350,9 +350,9 @@ chạy `vite` thật và thao tác qua các luồng:
 | Kết quả đến trễ không ghi đè | ✅ unit test |
 | Chạy một mạch qua HTTP với DB thật (tạo intent → cron → webhook → sổ) | ⛔ **CHƯA kiểm chứng** — máy dev không có PostgreSQL (như P0/P1). Phải chạy lại khi có DB. |
 
-**Việc còn lại của 10.B:** P2.2 sao kê ngân hàng (`bank_transactions`/`bank_statements`, adapter CSV/API)
-và P2.3 khớp 3 tầng + cron `reconciliation-catchup` + dead-letter queue; FE `/payment-intents` và
-`/reconciliation`. Khi thêm giá trị enum mới cho Postgres (`synchronize: false`) phải chạy:
+**Việc còn lại của 10.B:** FE `/payment-intents` và `/reconciliation`. P2.2 (sao kê ngân hàng), P2.3
+(khớp 3 tầng + cron `reconciliation-catchup`) và `dead-letter` queue đã xong. Khi thêm giá trị enum mới
+cho Postgres (`synchronize: false`) phải chạy:
 `ALTER TYPE payment_intent_status_enum ADD VALUE 'unknown';`
 `ALTER TYPE reconciliation_exception_type_enum ADD VALUE 'late_event_conflict';` /
 `'unresolved_provider_status';`
@@ -444,13 +444,31 @@ khớp, danh sách lệch + xử lý). Khi thêm giá trị enum mới cho Postg
 **đúng một** bút toán, có vết audit giải thích từng bước. Và: nạp một file CSV **và** một adapter API giả
 ⇒ cùng đi vào `bank_transactions`, cùng một bảng khớp, không nhánh code riêng.
 
+**Bằng chứng triển khai (10.B):**
+
+| Hạng mục | Trạng thái |
+| -------- | ---------- |
+| `payment_intents` (entity/service/controller/module) | ✅ `payment-intents/` — `idempotencyKey` unique, trạng thái gồm `unknown`/`pending_verification` |
+| Provider mô phỏng (chỉ dev) | ✅ `payment-provider.simulator.ts` + `interfaces/payment-provider.interface.ts` |
+| Hàng đợi thứ 5 `payments` + worker | ✅ `payments.processor.ts`; `QueueService` mở rộng **8 hàng đợi** (kèm `statements`, `dead-letter`) |
+| Bộ điều phối webhook `payment.*` | ✅ `payment-inbound.handler.ts` tự đăng ký vào `InboundEventRegistry` |
+| `bank_transactions` — **một mô hình chuẩn** | ✅ `reconciliation/entities/bank-transaction.entity.ts` |
+| `StatementSourceAdapter` + 2 hiện thực | ✅ `adapters/csv-json-statement.adapter.ts` + `bank-api-statement.adapter.ts` (khung) |
+| `bank_statements` + job nạp file | ✅ `bank-statements.service.ts` / `.controller.ts` + `statements.processor.ts` |
+| Khớp 3 tầng + `reconciliation_matches` (n-n) | ✅ `reconciliation.service.ts` |
+| `reconciliation_exceptions` + quy trình xử lý kèm lý do | ✅ `reconciliation-exceptions.service.ts` (không xoá — giữ bằng chứng) |
+| API | ✅ 12 route (xem `AGENTS.md` mục 8, khối "Mục 10.B") |
+| Đăng ký ở gốc | ✅ `app.module.ts` (test `modules.wiring.spec.ts` quét `app.module.ts` chặn module bị comment) |
+| Boot runtime | ✅ `jobs.boot.spec.ts`: DI đầy đủ + `worker` được BullMQ gắn + handler tự đăng ký |
+| ⚠️ Sửa kèm | ✅ `JobsModule` **export `JobRunsService`** — thiếu nó thì `StatementsProcessor` không resolve được ⇒ **app sập lúc khởi động** (test boot bắt được) |
+
 ---
 
 ## 6. Giai đoạn P3 — 10.C (đa tiền tệ → thuế → đa công ty)
 
 Làm **theo thứ tự này**, mỗi phần một migration riêng.
 
-- [ ] **Đa tiền tệ trước tiên**, vì quyết định #3 đã chốt là tiền hạch toán **cấu hình được**:
+- [x] **Đa tiền tệ trước tiên**, vì quyết định #3 đã chốt là tiền hạch toán **cấu hình được**: ✅ HOÀN THÀNH
       - [ ] `companies` (`code`, `name`, `taxCode`, **`baseCurrency`**, `isActive`) — tối thiểu phần
             `baseCurrency` để mọi dịch quy đổi có đích đến; phần cách ly dữ liệu để P3.3.
       - [ ] `currencies` (`code`, `name`, `decimals`, `isBase`) + `exchange_rates`
@@ -462,13 +480,52 @@ Làm **theo thứ tự này**, mỗi phần một migration riêng.
       - [ ] Nguồn tỷ giá: **bảng nhập tay** (`POST /api/exchange-rates`) + seed theo ngày. Tự động lấy tỷ
             giá là hạng mục **tùy chọn về sau** (chưa có nhà cung cấp FX nào được xác nhận — khảo sát trước
             khi tích hợp).
-- [ ] **Thuế**: `tax_codes` (`code`, `name`, `rate`, `type`, `outputAccountId` 3331, `inputAccountId` 1331);
+- [x] **Thuế**: `tax_codes` (`code`, `name`, `rate`, `type`, `outputAccountId` 3331, `inputAccountId` 1331);
       thuế là **lớp tính trên dòng chứng từ**, dòng thuế sinh tự động khi post, **không** nhập tay vào bút
-      toán. Báo cáo GTGT đầu vào/đầu ra theo kỳ + xuất Excel (`ReportExportService`).
+      toán. Báo cáo GTGT đầu vào/đầu ra theo kỳ + xuất Excel (`ReportExportService`). ✅ HOÀN THÀNH
 - [ ] **Đa công ty (cuối cùng, migration riêng 3 bước)**: (1) thêm `company_id` **nullable** + backfill;
       (2) mọi truy vấn lọc theo công ty (`AsyncLocalStorage` — đã có tiền lệ `AuditContext`); (3) chuyển
       **NOT NULL** + đổi unique thành `(company_id, code)`. Kỳ kế toán/số dư/báo cáo tách hoàn toàn.
       ⚠️ `ScopePicker` hiện chỉ chọn **kỳ**, không phải công ty — thêm công tắc chọn công ty riêng.
+
+**Bằng chứng triển khai (10.C.1 — đa tiền tệ):**
+
+| Hạng mục | Trạng thái |
+| -------- | ---------- |
+| `companies` (`code`, `name`, `taxCode`, **`baseCurrency`**, `isDefault`, `isActive`) | ✅ `companies/` — công ty đầu tiên tự thành mặc định; `baseCurrency()` giải theo thứ tự mặc định → đầu tiên → `VND` |
+| `currencies` (`code` PK, `decimals`, `isBase`) | ✅ `currencies/` |
+| `exchange_rates` + `UNIQUE(currencyCode, rateDate)` | ✅ upsert theo cặp; **từ chối** khai tỷ giá cho chính loại tiền hạch toán |
+| `journal_lines.currency` / `fx_amount` / `fx_rate` (nullable) | ✅ **`debit`/`credit` luôn là tiền hạch toán** ⇒ Σ Nợ = Σ Có không đổi, báo cáo cũ **không phải sửa** |
+| Quy đổi tại thời điểm post + kiểm tra khớp | ✅ `JournalsService.resolveFxLine` + `assertFxConversionMatches` — **từ chối** khi `fxAmount × fxRate ≠ debit/credit` (ghi đè sẽ tạo bút toán sai-mà-cân-bằng, không bất biến nào bắt được) |
+| Tra tỷ giá "mới nhất không muộn hơn ngày" + cờ `fallback` | ✅ `ExchangeRatesService.findApplicable` — **không nội suy** (tỷ giá nội suy không phải số đã công bố) |
+| Bút toán chênh lệch tỷ giá (413/515/635) | ✅ `FxDifferenceService` (bảng dấu có tài liệu) + 2 endpoint preview/ghi sổ |
+| Đảo bút toán giữ nguyên 3 cột ngoại tệ | ✅ `reverseWithin` sao nguyên `currency`/`fxAmount`/`fxRate` khi hoán Nợ/Có |
+| Seed | ✅ `seedCompany` + `seedCurrencies`; tỷ giá mẫu **chỉ khi** `SEED_SAMPLE_FX_RATES=true` (tỷ giá sai-mà-hợp-lý gây ghi sổ sai âm thầm) |
+| API | ✅ `/api/companies` (7), `/api/currencies` (5), `/api/exchange-rates` (5), `/api/journals/fx-difference*` (2) |
+| Kiểm thử | ✅ `currency.util.spec.ts` (14) + `exchange-rates.service.spec.ts` (12) + `fx-difference.service.spec.ts` (15) + 11 test dòng ngoại tệ trong `journals.service.spec.ts` + 2 test wiring |
+
+**Bằng chứng triển khai (10.C.2 — thuế GTGT):**
+
+| Hạng mục | Trạng thái |
+| -------- | ---------- |
+| `tax_codes` (`code`, `name`, `rate`, `type`, `outputAccountId`, `inputAccountId`) | ✅ `taxes/` — bảng **cấu hình** (luật thuế VN đổi theo thời gian), `rate` là **phần trăm** `NUMERIC(9,4)` |
+| Thuế suất **sao lại** vào dòng (`sales_invoice_lines` / `vendor_bill_lines`) | ✅ thêm `tax_code_id` / `tax_rate` / `tax_amount` — sửa danh mục **không** đổi chứng từ đã lập (cùng nguyên tắc `fx_rate`) |
+| Thuế là lớp tính **trên dòng**, tổng chứng từ = tổng dòng đã làm tròn | ✅ `common/utils/tax.util.ts` `computeTaxAmount` là **nguồn sự thật duy nhất**; lệch ⇒ **400** (`resolveDocumentTaxes`), **không** tự sửa cho khớp |
+| Dòng thuế sinh **tự động khi ghi sổ**, không nhập tay | ✅ bán ⇒ **Có 3331**; mua ⇒ **Nợ 1331** (khấu trừ). ⚠️ **Sửa bug thật**: trước 10.C.2, `post` ghi Nợ 131 = `total` nhưng chỉ Có doanh thu = `subtotal` ⇒ hóa đơn có thuế sinh bút toán **mất cân bằng** (hóa đơn mua y hệt) |
+| Bất biến kiểm **tại `post`**, không chỉ tại `create` | ✅ thuế đầu chứng từ lệch tổng dòng ⇒ **409**, từ chối ghi sổ |
+| Dòng thuế gom theo **tài khoản đích** (không theo mã thuế) | ✅ `groupVatByAccount` — hai mã cùng trỏ 3331 ⇒ **một** dòng, khớp sổ cái; tách 33311/33312 ⇒ dòng riêng |
+| Tài khoản thuế: khai trên mã → rơi về tiền tố `3331`/`1331` | ✅ `resolveVatAccount` / `resolveVatAccountById` luôn trả tài khoản **lá, đang hoạt động** |
+| Không xoá mã thuế đã dùng | ✅ `remove` ⇒ **409** kèm số dòng đang dùng; ngừng sử dụng thay vì xoá |
+| Báo cáo GTGT đầu vào/đầu ra theo kỳ | ✅ `GET /api/reports/vat` — bảng kê **từng hóa đơn** (số/ngày/MST đối tượng) của chứng từ `posted`; `payable` = đầu ra − đầu vào (**âm** ⇒ còn được khấu trừ, không cắt về 0) |
+| Xuất Excel/PDF | ✅ `kind = vat-input-output` qua `ReportExportService` (thêm `ReportKind` + bảng 7 cột) |
+| Tài khoản doanh thu/chi phí vẫn do `AccountDefaultsService` | ✅ quyết định #1 giữ nguyên — đổi thuế suất **không** đổi tài khoản doanh thu |
+| Seed | ✅ `seedTaxCodes` — `VAT0`/`VAT5`/`VAT8`/`VAT10`/`KCT`, không gán tài khoản đích (rơi về tiền tố), idempotent |
+| API | ✅ `/api/taxes` (6 route) + `/api/reports/vat` + `export/vat-input-output` |
+| Kiểm thử | ✅ `tax.util.spec.ts` (7) + `tax-codes.service.spec.ts` (12) + `vat-report.service.spec.ts` (6) + 4 test thuế đầu ra (`sales-invoices.service.spec.ts`) + 3 test thuế đầu vào (`vendor-bills.service.spec.ts`) + 1 test wiring |
+
+**Nghiệm thu P3 (phần đã làm):** hóa đơn bán 1.000.000 + GTGT 10% ⇒ Nợ 131 `1.100.000` / Có 511
+`1.000.000` / Có 3331 `100.000` — **cân bằng**; hóa đơn mua đối xứng với **Nợ 1331**. Sửa thuế suất
+trong danh mục **không** làm đổi số liệu hóa đơn cũ. `GET /api/reports/vat` khớp đúng số thuế đã ghi sổ.
 
 ---
 
@@ -482,7 +539,11 @@ Làm **theo thứ tự này**, mỗi phần một migration riêng.
 | Phiếu thu/chi | danh sách + form + **UI phân bổ** vào hóa đơn | ✅ `features/payments` (P1.6) |
 | Công nợ | công nợ hiện tại + aging theo đối tượng | ✅ `features/receivables` (P1.6) |
 | Thanh toán | intent + trạng thái + nút tra cứu lại | ⏳ `features/payment-intents` — backend P2.1 đã xong |
-| Đối soát | nhập sao kê, bảng khớp, danh sách lệch + xử lý | ⏳ `features/reconciliation` — chờ P2.2/P2.3 |
+| Đối soát | nhập sao kê, bảng khớp, danh sách lệch + xử lý | ⏳ `features/reconciliation` — backend P2.2/P2.3 đã xong |
+| Công ty | CRUD công ty + chọn **đơn vị tiền hạch toán** | ⏳ `features/companies` (10.C.1) |
+| Tiền tệ & tỷ giá | danh mục tiền + bảng tỷ giá theo ngày + tra tỷ giá | ⏳ `features/currencies` (10.C.1) |
+| Thuế | CRUD mã thuế + xem số dòng đang dùng | ⏳ `features/taxes` (10.C.2) |
+| Bảng kê GTGT | xem theo kỳ + xuất Excel/PDF | ⏳ thêm tab vào `features/reports` (10.C.2) |
 
 Component dùng chung cho chứng từ: `features/documents/` — `LineItemsEditor` (dòng hàng, thành tiền dẫn xuất),
 `DocumentDetailDialog`, `VoidDocumentDialog` (lý do bắt buộc), `DocumentStatusBadge`, `money.ts`
@@ -503,7 +564,15 @@ bộ component mới nếu bộ hiện có đủ dùng. Cập nhật `types/api.
 - [ ] Bất biến: ghi sổ vào kỳ đã khóa vẫn bị chặn; `UNIQUE(source_type, source_id)` chặn bút toán trùng nguồn.
 - [ ] Truy vết: báo cáo aging → hóa đơn → bút toán (+ đảo) → audit log, qua API.
 - [ ] Hồi quy: webhook gửi lại cùng `id` không xử lý hai lần.
-- [ ] Cập nhật `modules.wiring.spec.ts` khi thêm module mới (module mới **phải** được đăng ký ở gốc).
+- [x] Cập nhật `modules.wiring.spec.ts` khi thêm module mới (module mới **phải** được đăng ký ở gốc). ✅
+      đã bổ sung `TaxesModule` + mở rộng `ReportsModule` cho `VatReportService`; `SalesInvoicesModule` /
+      `VendorBillsModule` nay đi qua cây `TaxesModule` (helper `withTaxTree`).
+- [x] **10.C.1 — đa tiền tệ**: quy đổi **phải khớp** `debit`/`credit` (sai ⇒ 400, không ghi đè); tra tỷ giá
+      "không muộn hơn ngày" **không nội suy**; đảo bút toán giữ nguyên 3 cột ngoại tệ; bảng dấu chênh lệch
+      (131 trả nhiều ⇒ lãi · 331 trả nhiều ⇒ lỗ). ✅
+- [x] **10.C.2 — thuế**: `computeTaxAmount` (làm tròn 4 chữ số, thuế suất lẻ); thuế suất **sao lại** vào dòng;
+      tổng chứng từ = tổng dòng và **lệch ⇒ từ chối**; `post` sinh dòng thuế đúng chiều (Có 3331 / Nợ 1331)
+      và **Σ Nợ = Σ Có**; gom theo tài khoản đích; `payable` âm không bị cắt về 0. ✅
 
 ---
 
@@ -518,8 +587,8 @@ bộ component mới nếu bộ hiện có đủ dùng. Cập nhật `types/api.
 | P1.4 | Aging + revenue-by-party + nâng cấp nhắc nợ + webhook event | 3–4 ngày | P1.3 |
 | P1.5 | party summary + sub-ledger + mở rộng traceability | 2 ngày | P0 |
 | P1.6 | ✅ 4 trang FE của 10.A (hóa đơn bán/mua, phiếu, công nợ) | 5–7 ngày | P1 |
-| P2 | Payment & Reconciliation (intent, provider sim, sao kê, khớp, lệch) | 4–6 tuần | P1 |
-| P3 | Đa tiền tệ → thuế → đa công ty | 4–6 tuần | P1 + P2 |
+| P2 | Payment & Reconciliation (intent, provider sim, sao kê, khớp, lệch) | 4–6 tuần | P1 | ✅ **xong** (BE) |
+| P3 | Đa tiền tệ → thuế → đa công ty | 4–6 tuần | P1 + P2 | 🟡 **10.C.1 + 10.C.2 xong**; 10.C.3 (đa công ty) còn lại |
 
 ---
 
