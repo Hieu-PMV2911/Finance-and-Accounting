@@ -1,0 +1,69 @@
+# ─────────────────────────────────────────────────────────────
+# Dependencies — the bulk of the repo. Never commit these.
+# ─────────────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+.pnpm-store/
+.yarn/
+jspm_packages/
+
+# ─────────────────────────────────────────────────────────────
+# Build output
+# ─────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+*.tsbuildinfo
+.vite/
+.turbo/
+.rollup.cache/
+
+# ─────────────────────────────────────────────────────────────
+# Artifacts this plugin generates inside a consuming app.
+# They are derived from source icons/images — regenerate with
+# `smart-asset prepare`, never review them in a diff.
+# ─────────────────────────────────────────────────────────────
+sprite.svg
+**/sprite*.svg
+smart-asset.manifest.json
+smart-asset.d.ts
+src/smart-asset.d.ts
+
+# ─────────────────────────────────────────────────────────────
+# Test / coverage
+# ─────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+test/tmp/
+test/.tmp/
+*.snap.tmp
+
+# ─────────────────────────────────────────────────────────────
+# Logs & debug
+# ─────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.smart-asset-debug/
+
+# ─────────────────────────────────────────────────────────────
+# Local environment
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.local
+
+# ─────────────────────────────────────────────────────────────
+# Editor / OS
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~

@@ -1,0 +1,72 @@
+{
+  "name": "unplugin-smart-asset",
+  "version": "0.1.0",
+  "description": "Zero-import icon & asset manager: <icon-lucide-home /> without imports, native SVG sprite, threshold-based image inlining.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "*.md"
+  ],
+  "bin": {
+    "smart-asset": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
+    },
+    "./rollup": {
+      "types": "./dist/rollup.d.ts",
+      "import": "./dist/rollup.js"
+    },
+    "./runtime/react": {
+      "types": "./dist/runtime/react.d.ts",
+      "import": "./dist/runtime/react.js"
+    },
+    "./cli": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.25.0",
+    "magic-string": "^0.30.0",
+    "svgo": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@vue/compiler-sfc": ">=3.4.0",
+    "react": ">=18",
+    "svelte": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@vue/compiler-sfc": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@vue/compiler-sfc": "^3.5.44",
+    "react": "^19.0.0",
+    "rollup": "^4.65.0",
+    "svelte": "^5.57.2",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}
